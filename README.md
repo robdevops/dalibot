@@ -62,7 +62,7 @@ Config is via the .env file.
 Mandatory parameters:
 * Set `openai_api_key` to the [key from OpenAI](https://beta.openai.com/account/api-keys)
 * Set `telegramOutgoingToken` to a [secret token of your choice](https://core.telegram.org/bots/api#setwebhook)
-* Set `telegramOutgoingWebhook` to your web server
+* Set `telegramOutgoingWebhook` to the URL of your web server
 * Set `telegramBotToken` to the token provided by [BotFather](https://core.telegram.org/bots/tutorial)
 
 Example:
