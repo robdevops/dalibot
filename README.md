@@ -1,11 +1,11 @@
 # dalibot
 Telegram chat bot for [DALL·E 2](https://openai.com/dall-e-2/)
 
-![Screenshot of chat with Dalibot](doc/dali_3.png?raw=true "close up portrait of a girl in the style of Claude Monet")
-
 # Features
 * Responds to a text prompt with an image
 * Responds to an image with four variations
+
+![Screenshot of chat with Dalibot](doc/dali_3.png?raw=true "close up portrait of a girl in the style of Claude Monet")
 
 # Usage
 * Run `bot.py` to start the listener. By default, it listens on http://127.0.0.1:5000
