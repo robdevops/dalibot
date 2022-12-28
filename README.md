@@ -1,7 +1,7 @@
 # dalibot
 Telegram chat bot for [DALL·E 2](https://openai.com/dall-e-2/)
 
-![Screenshot of chat with Dalibot](doc/dali_1.png?raw=true "a painting of a fox sitting in a field at sunrise in the style of Claude Monet")
+![Screenshot of chat with Dalibot](doc/dali_3.png?raw=true "close up portrait of a girl in the style of Claude Monet")
 
 # Features
 * Responds to a text prompt with an image
@@ -23,6 +23,8 @@ Telegram chat bot for [DALL·E 2](https://openai.com/dall-e-2/)
   * Pillow
   * requests
 * An [OpenAI API key](https://beta.openai.com/account/api-keys)
+
+![Screenshot of chat with Dalibot](doc/dali_1.png?raw=true "a painting of a fox sitting in a field at sunrise in the style of Claude Monet")
 
 # Setup
 * Install the Python modules
@@ -52,6 +54,7 @@ server {
 ```
 cp env.template .env
 ```
+![Screenshot of chat with Dalibot](doc/dali_4.png?raw=true "girl with a pearl earring by Johannes Vermeer in the style of 8-bit pixel art")
 
 # Config
 Config is via the .env file.
