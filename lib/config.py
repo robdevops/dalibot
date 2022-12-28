@@ -7,7 +7,7 @@ load_dotenv()
 
 config_archive = os.getenv("archive", 'False').lower() in ('true', '1', 't')
 config_archive_dir = os.getenv('archive_dir', 'var/cache')
-config_telegramAllowedUserIDs = os.getenv('config_telegramAllowedUserIDs', '').split()
+config_telegramAllowedUserIDs = os.getenv('telegramAllowedUserIDs', '').split()
 config_telegramBotToken = os.getenv('telegramBotToken', False)
 config_telegramOutgoingToken = os.getenv('telegramOutgoingToken', False)
 config_telegramOutgoingWebhook = os.getenv('telegramOutgoingWebhook', False)
