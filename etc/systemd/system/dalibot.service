@@ -1,0 +1,12 @@
+[Unit]
+Description=dalibot interactive chat bot
+
+[Service]
+Type=simple
+User=CHANGEME
+ExecStart=/home/CHANGEME/dalibot/bot.py
+Restart=on-failure
+RestartSec=30s
+
+[Install]
+WantedBy=multi-user.target
