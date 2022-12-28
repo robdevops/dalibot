@@ -24,14 +24,14 @@ Telegram chat bot for [DALL·E 2](https://openai.com/dall-e-2/)
   * requests
 * An [OpenAI API key](https://beta.openai.com/account/api-keys)
 
-![Screenshot of chat with Dalibot](doc/dali_1.png?raw=true "a painting of a fox sitting in a field at sunrise in the style of Claude Monet")
+![Screenshot of chat with Dalibot](doc/dali_2.png?raw=true "an impressionist oil painting of sunflowers in a purple vase")
 
 # Setup
 * Install the Python modules
 ```
 pip3 install dotenv gevent openai Pillow requests
 ```
-* Point your web server at the listener. Example NGINX config:
+* Point your web server at the listener. Example Nginx config:
 ```
 server {
 	listen 8443 ssl;
@@ -96,5 +96,4 @@ ip = 127.0.0.1
 port = 5000
 ```
 
-![Screenshot of chat with Dalibot](doc/dali_2.png?raw=true "an impressionist oil painting of sunflowers in a purple vase")
-
+![Screenshot of chat with Dalibot](doc/dali_1.png?raw=true "a painting of a fox sitting in a field at sunrise in the style of Claude Monet")
