@@ -90,7 +90,7 @@ Enable private messaging by listing telegram numeric ids separated by a space:
 telegramAllowedUserIDs = 
 ```
 
-Override listing paramters:
+Override listen parameters:
 ```
 ip = 127.0.0.1
 port = 5000
