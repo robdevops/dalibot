@@ -109,7 +109,7 @@ port = 5000
 
 # Daemonize
 
-There is an example systemd unit file `etc/systemd/system/dalibot.service` to start dalibot in the background at boot. Copy it to /etc:
+There is an example systemd unit file `etc/systemd/system/dalibot.service` to start dalibot in the background at boot. Copy it to /etc
 ```
 sudo cp -v ~/dalibot/etc/systemd/system/dalibot.service /etc/systemd/system/
 ```
@@ -127,10 +127,5 @@ sudo systemctl daemon-reload
 Enable and start the bot:
 ```
 sudo systemctl enable dalibot --now
-```
-
-Verify:
-```
-systemctl status dalibot
 ```
 
