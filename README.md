@@ -1,11 +1,16 @@
 # dalibot
 Telegram chat bot for [DALL·E 2](https://openai.com/dall-e-2/)
 
-# Features
+# Description
 * Responds to a text prompt with an image
 * Responds to an image with four variations
 
 ![Screenshot of chat with Dalibot](doc/dali_3.png?raw=true "close up portrait of a girl in the style of Claude Monet")
+
+# Features
+* Auto-crop non-square uploads to meet OpenAI requirements
+* Optionally archive OpenAI results to local storage
+* For speed and cost benefits, OpenAI images do not pass through the bot (unless you enable archiving)
 
 # Usage
 * Run `bot.py` to start the listener. By default, it listens on http://127.0.0.1:5000
@@ -27,6 +32,10 @@ Telegram chat bot for [DALL·E 2](https://openai.com/dall-e-2/)
 ![Screenshot of chat with Dalibot](doc/dali_2.png?raw=true "an impressionist oil painting of sunflowers in a purple vase")
 
 # Setup
+* Clone the git repo
+```
+git clone https://github.com/robdevops/dalibot.git ~/dalibot
+```
 * Install the Python modules
 ```
 pip3 install dotenv gevent openai Pillow requests
@@ -79,7 +88,11 @@ debug = 1
 openai_organization = org-myorg
 ```
 
+<<<<<<< HEAD
 Enable archiving to download OpenAI images to disk (defaults to `dalibot/var/cache`). Note: user uploads are never archived.
+=======
+Enable archiving to download OpenAI images to disk (defaults to `dalibot/var/cache`). Note: user uploads for variations always traverse the bot but are never saved.
+>>>>>>> f65545519665e24432e198923ac9613b12d1d6f3
 ```
 archive = 1
 archive_dir = var/cache
@@ -124,3 +137,26 @@ systemctl status dalibot
 ```
 
 ![Screenshot of chat with Dalibot](doc/dali_1.png?raw=true "a painting of a fox sitting in a field at sunrise in the style of Claude Monet")
+
+# Daemonize
+
+There is an example systemd unit file `etc/systemd/system/dalibot.service` to start dalibot in the background at boot. Copy it to /etc
+```
+sudo cp -v ~/dalibot/etc/systemd/system/dalibot.service /etc/systemd/system/
+```
+
+Edit the file to set your path and user to run as:
+```
+sudo sed -i 's/CHANGEME/your username/' /etc/systemd/system/dalibot.service
+```
+
+Reload systemd:
+```
+sudo systemctl daemon-reload
+```
+
+Enable and start the bot:
+```
+sudo systemctl enable dalibot --now
+```
+

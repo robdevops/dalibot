@@ -5,10 +5,12 @@ import requests
 
 from lib.config import *
 import lib.telegram as telegram
+#import urllib.request
 
 import io
 import openai
 from PIL import Image
+from sys import stderr
 
 def process_request(service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id=False):
     now = int(time.time())
@@ -82,7 +84,7 @@ def generate_image(message):
         image_url = response['data'][0]['url']
         print(image_url)
     except openai.error.OpenAIError as e:
-        print(e.http_status, e.error)
+        print(e.http_status, e.error, file=stderr)
         return False, e.error['message']
     return True, image_url
 
@@ -105,8 +107,8 @@ def image_variation(image_data):
             url_list.append(item['url'])
         #print(response)
     except openai.error.OpenAIError as e:
-        print(e.http_status, e.error)
-        return False, e.error
+        print(e.http_status, e.error, file=stderr)
+        return False, e.error['message']
     return True, url_list
 
 def download_file(image_url):
@@ -119,14 +121,18 @@ def download_file(image_url):
     return image_data
 
 def bytesio_to_file(image_bytesio, filename):
-    with open(filename, "wb") as f:
-        f.write(image_bytesio.getbuffer())
+    try:
+        with open(filename, "wb") as f:
+            f.write(image_bytesio.getbuffer())
+    except Exception as e:
+        print(e, file=stderr)
     print("Saved", filename)
 
 def crop_square(image_url):
     cropped=False
     print("Opening image")
-    im = Image.open(urllib.request.urlopen(image_url))
+    im = Image.open(requests.get(image_url).content)
+    #im = Image.open(urllib.request.urlopen(image_url))
     width, height = im.size
     if width != height:
         print("Cropping to center while preserving shortest axis")
