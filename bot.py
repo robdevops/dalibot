@@ -33,7 +33,7 @@ def main(environ, start_response):
         print_body(inbound)
     if uri == '/telegram':
         service = 'telegram'
-        botName = '@' + telegram.getBotName()
+        botName = '@' + telegram.getMe()['username']
         if 'HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN' not in environ:
             print_headers()
             print("Fatal:", service, "authorisation header not present")
@@ -56,9 +56,9 @@ def main(environ, start_response):
                 user = userRealName = '@' + inbound["message"]["from"]["first_name"]
             if chat_type == "private": # Anyone can find and PM the bot so we need to be careful
                 if user_id in config_telegramAllowedUserIDs:
-                    print(user_id, user, userRealName, "is whitelisted for private message")
+                    print(user, userRealName, user_id, "is whitelisted for private message")
                 else:
-                    print(user_id, user, userRealName, "is not whitelisted. Ignoring.")
+                    print(user, userRealName, user_id, "is not whitelisted. Ignoring.")
                     return [b'<h1>Unauthorized</h1>']
             file_id=False
             if "text" in inbound["message"]:
