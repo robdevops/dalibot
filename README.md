@@ -5,7 +5,7 @@ Telegram chat bot for [DALL·E 2](https://openai.com/dall-e-2/)
 * Responds to a text prompt with an image
 * Responds to an image with four variations
 
-![Screenshot of chat with Dalibot](doc/dali_3.png?raw=true "close up portrait of a girl in the style of Claude Monet")
+![Screenshot of chat with Dalibot](doc/dali_1.png?raw=true "close up portrait of a girl in the style of Claude Monet")
 
 # Features
 * Auto-crop and resize uploaded images to meet OpenAI requirements
@@ -65,7 +65,7 @@ server {
 ```
 cp dalibot.conf.template dalibot.conf
 ```
-![Screenshot of chat with Dalibot](doc/dali_4.png?raw=true "girl with a pearl earring by Johannes Vermeer in the style of 8-bit pixel art")
+![Screenshot of chat with Dalibot](doc/dali_3.png?raw=true "girl with a pearl earring by Johannes Vermeer in the style of 8-bit pixel art")
 
 # Config
 Config is via dalibot.conf
@@ -107,7 +107,7 @@ ip = 127.0.0.1
 port = 5000
 ```
 
-![Screenshot of chat with Dalibot](doc/dali_1.png?raw=true "a painting of a fox sitting in a field at sunrise in the style of Claude Monet")
+![Screenshot of chat with Dalibot](doc/dali_4.png?raw=true "cute watermelon smiling")
 
 # Daemonize
 
@@ -144,3 +144,4 @@ telegramAllowedUserIDs = 123456789 987654321
 * Only allow connections from Telegram's subnet `91.108.4.0/22` as per the example Nginx config.
 * Set `telegramOutgoingToken` to a strong value to prevent another bot being used to access your URL.
 
+![Screenshot of chat with Dalibot](doc/dali_5.png?raw=true "a painting of a fox sitting in a field at sunrise in the style of Claude Monet")
