@@ -109,10 +109,10 @@ def main(environ, start_response):
                 if "caption" in inbound["message"]:
                     message = inbound["message"]["caption"]
                 file_id = inbound["message"]["document"]["file_id"]
+                print(f"[Telegram document]:", user, file_id, mime_type, message)
             else:
                 print(f"[{service}]: unhandled message without text/photo/document", file=stderr)
                 return [b'<h1>Unhandled</h1>']
-                print(f"[Telegram document]:", user, file_id, message)
     elif uri == '/slack':
         service = 'slack'
         if 'token' not in inbound:
