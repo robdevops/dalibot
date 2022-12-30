@@ -1,6 +1,8 @@
+[main]
 telegramAllowedUserIDs =
 telegramBotToken =
+telegramOutgoingToken
 telegramOutgoingWebhook =
-telegramOutgoingToken =
 openai_api_key =
-archive = 0
+archive=0
+
