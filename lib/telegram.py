@@ -1,27 +1,28 @@
 import requests
 from lib.config import *
+import threading
 
 def setWebhook():
     telegram_url = webhooks['telegram'] + 'setWebhook'
     params = {
         "url": config_telegramOutgoingWebhook, "allowed_updates": "message", 'secret_token': config_telegramOutgoingToken}
     #params = {"url": ''} # unsubscribe
-    response = requests.post(
+    r = requests.post(
         telegram_url,
         params=params,
         timeout=config_http_timeout
     )
-    print(response.text)
+    print("Registering Telegram webhook:", r.text)
 
 def getMe():
     telegram_url = webhooks['telegram'] + 'getMe'
     params = {"url": config_telegramOutgoingWebhook}
-    response = requests.post(
+    r = requests.post(
         telegram_url,
         params=params,
         timeout=config_http_timeout
     )
-    return response.json()['result']
+    return r.json()['result']
 
 def sendPhoto(chat_id, photo_url, caption, message_id=None):
     url = webhooks['telegram'] + "sendPhoto?chat_id=" + str(chat_id)
@@ -111,7 +112,6 @@ def sendMessage(chat_id, message, message_id=None):
     else:
         print(r.status_code, "error outbound to Telegram")
         return False
-    return()
 
 def setMyCommands():
     url = webhooks['telegram'] + "setMyCommands"
@@ -123,12 +123,14 @@ def setMyCommands():
     except:
         print("Failure executing request:", url, headers, payload)
         return False
-    if r.status_code == 200:
-        print(r.status_code, "OK outbound to Telegram")
-    else:
+    if not r.status_code == 200:
         print(r.status_code, "error outbound to Telegram")
         return False
-    return()
+    print("Registering Telegram bot commands:", r.text)
 
-setWebhook()
-setMyCommands()
+if config_telegramOutgoingToken and config_telegramOutgoingWebhook:
+    try:
+        threading.Thread(target=setWebhook).start()
+        threading.Thread(target=setMyCommands).start()
+    except ReadTimeout:
+        print("Telegram timeout")
