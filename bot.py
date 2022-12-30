@@ -164,9 +164,12 @@ def main(environ, start_response):
 if __name__ == '__main__':
     httpd = pywsgi.WSGIServer((config_ip, config_port), main)
     if debug:
-        print("Debugging mode is on")
+        print("Debugging mode is on", file=stderr)
         httpd.secure_repr = False
-    print(f'Listening on http://{config_ip}:{config_port}', file=stderr)
+    print(f'Opening socket on http://{config_ip}:{config_port}', file=stderr)
     # to start the server asynchronously, call server.start()
     # we use blocking serve_forever() here because we have no other jobs
-    httpd.serve_forever()
+    try:
+        httpd.serve_forever()
+    except OSError as e:
+        print(e, file=stderr)
