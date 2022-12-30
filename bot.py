@@ -100,9 +100,19 @@ def main(environ, start_response):
                 photo = inbound["message"]["photo"][-1]
                 file_id = photo["file_id"]
                 print(f"[Telegram photo]:", user, file_id, message)
+            elif "document" in inbound["message"]:
+                mime_type = inbound["message"]["document"]["mime_type"]
+                if not mime_type.startswith('image/'):
+                    return [b'<h1>Unhandled</h1>']
+                    print(f"[Telegram document unhandled mime_type]:", user, file_id, mime_type, message)
+                message = ''
+                if "caption" in inbound["message"]:
+                    message = inbound["message"]["caption"]
+                file_id = inbound["message"]["document"]["file_id"]
             else:
-                print(f"[{service}]: unhandled: 'message' without 'text'", file=stderr)
+                print(f"[{service}]: unhandled message without text/photo/document", file=stderr)
                 return [b'<h1>Unhandled</h1>']
+                print(f"[Telegram document]:", user, file_id, message)
     elif uri == '/slack':
         service = 'slack'
         if 'token' not in inbound:
@@ -154,6 +164,7 @@ def main(environ, start_response):
 if __name__ == '__main__':
     httpd = pywsgi.WSGIServer((config_ip, config_port), main)
     if debug:
+        print("Debugging mode is on")
         httpd.secure_repr = False
     print(f'Listening on http://{config_ip}:{config_port}', file=stderr)
     # to start the server asynchronously, call server.start()
