@@ -20,13 +20,13 @@ Telegram chat bot for [DALL·E 2](https://openai.com/dall-e-2/)
 
 # Requirements
 * A web server with a valid domain name and certificate
-* A python bot user from [BotFather](https://core.telegram.org/bots/tutorial)
-* Python 3.8.10
+* A Telegram bot token from [BotFather](https://core.telegram.org/bots/tutorial)
+* An [OpenAI API key](https://beta.openai.com/account/api-keys)
+* Python 3.8.10+
   * gevent
   * openai
   * pillow
   * requests
-* An [OpenAI API key](https://beta.openai.com/account/api-keys)
 
 ![Screenshot of chat with Dalibot](doc/dali_2.png?raw=true "an impressionist oil painting of sunflowers in a purple vase")
 
@@ -78,9 +78,9 @@ Mandatory parameters:
 
 Example:
 ```
-openai_api_key = sk-mykey
-telegramBotToken = 0000000000:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-telegramOutgoingToken = mysecret
+openai_api_key = sk-p999HAfj6Cm1bO00SXgJc7kFxvFPtQ1KBBWrqSOU
+telegramBotToken = 4839574812:AAFD39kkdpWt3ywyRZergyOLMaJhac60qc
+telegramOutgoingToken = sLnHdQmYoohmysecret7PX5VDM4cPW
 telegramOutgoingWebhook = https://www.example.com/telegram
 ```
 
@@ -130,4 +130,17 @@ Enable and start the bot:
 ```
 sudo systemctl enable dalibot --now
 ```
+
+# Security
+* Protect your API keys and bot tokens from other users on the system:
+```
+chmod 600 dalibot.conf
+```
+* Because Telegram bots are discoverable by anyone, the bot ignores private messages by default. You can whitelist users in dalibot.conf. User IDs can be obtained from the URL bar when messaging a user on https://web.telegram.org/, or from the bots console output when someone messages it. Example config:
+```
+telegramAllowedUserIDs = 123456789 987654321
+```
+* To prevent unauthorized use, it's recommended to message `/setjoingroups` to BotFather and set it to `Disabled` after you have added your bot to the desired group(s).
+* Only allow connections from Telegram's subnet `91.108.4.0/22` as per the example Nginx config.
+* Set `telegramOutgoingToken` to a strong value to prevent another bot being used to access your URL.
 
