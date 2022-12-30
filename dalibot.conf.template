@@ -4,5 +4,4 @@ telegramBotToken =
 telegramOutgoingToken
 telegramOutgoingWebhook =
 openai_api_key =
-archive=0
-
+archive = 0
