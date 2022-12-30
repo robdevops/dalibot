@@ -8,7 +8,7 @@ Telegram chat bot for [DALL·E 2](https://openai.com/dall-e-2/)
 ![Screenshot of chat with Dalibot](doc/dali_3.png?raw=true "close up portrait of a girl in the style of Claude Monet")
 
 # Features
-* Auto-crop non-square uploads to meet OpenAI requirements
+* Auto-crop and resize uploaded images to meet OpenAI requirements
 * Optionally archive OpenAI results to local storage
 * For speed and cost benefits, OpenAI images do not pass through the bot (unless you enable archiving)
 
@@ -22,10 +22,9 @@ Telegram chat bot for [DALL·E 2](https://openai.com/dall-e-2/)
 * A web server with a valid domain name and certificate
 * A python bot user from [BotFather](https://core.telegram.org/bots/tutorial)
 * Python 3.8.10
-  * dotenv
   * gevent
   * openai
-  * Pillow
+  * pillow
   * requests
 * An [OpenAI API key](https://beta.openai.com/account/api-keys)
 
@@ -41,7 +40,7 @@ git clone https://github.com/robdevops/dalibot.git ~/dalibot
 ```
 * Install the Python modules
 ```
-pip3 install dotenv gevent openai Pillow requests
+pip3 install gevent openai pillow requests
 ```
 * Point your web server at the listener. Example Nginx config:
 ```
