@@ -34,6 +34,9 @@ Telegram chat bot for [DALL·E 2](https://openai.com/dall-e-2/)
 # Setup
 * Clone the git repo
 ```
+sudo $(which apt dnf yum) install git
+```
+```
 git clone https://github.com/robdevops/dalibot.git ~/dalibot
 ```
 * Install the Python modules
@@ -88,11 +91,7 @@ debug = 1
 openai_organization = org-myorg
 ```
 
-<<<<<<< HEAD
-Enable archiving to download OpenAI images to disk (defaults to `dalibot/var/cache`). Note: user uploads are never archived.
-=======
 Enable archiving to download OpenAI images to disk (defaults to `dalibot/var/cache`). Note: user uploads for variations always traverse the bot but are never saved.
->>>>>>> f65545519665e24432e198923ac9613b12d1d6f3
 ```
 archive = 1
 archive_dir = var/cache
@@ -107,33 +106,6 @@ Override listen parameters:
 ```
 ip = 127.0.0.1
 port = 5000
-```
-
-# Daemonize
-
-There is an example systemd unit file `etc/systemd/system/dalibot.service` to start dalibot in the background at boot. Copy it to /etc:
-```
-sudo cp -v ~/dalibot/etc/systemd/system/dalibot.service /etc/systemd/system/
-```
-
-Edit the file to set your path and user to run as:
-```
-sudo sed -i 's/CHANGEME/your username/' /etc/systemd/system/dalibot.service
-```
-
-Reload systemd:
-```
-sudo systemctl daemon-reload
-```
-
-Enable and start the bot:
-```
-sudo systemctl enable dalibot --now
-```
-
-Verify:
-```
-systemctl status dalibot
 ```
 
 ![Screenshot of chat with Dalibot](doc/dali_1.png?raw=true "a painting of a fox sitting in a field at sunrise in the style of Claude Monet")
