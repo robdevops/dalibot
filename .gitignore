@@ -134,3 +134,4 @@ todo.txt
 script.zip
 .env
 var/cache/*
+dalibot.conf
