@@ -1,5 +1,7 @@
 #!/usr/bin/python3
 
+import gevent.monkey
+gevent.monkey.patch_all()
 from gevent import pywsgi
 import json, re
 import threading
@@ -7,33 +9,12 @@ import logging, logging.handlers
 from sys import stderr
 
 from lib.config import *
-import lib.telegram as telegram
 import lib.worker as worker
+if config_telegramOutgoingToken and config_telegramOutgoingWebhook:
+    import lib.telegram as telegram
+    botName = telegram.botName
 
 def main(environ, start_response):
-    syslog = logging.getLogger('name')
-    syslog.setLevel(logging.DEBUG)
-    handler = logging.handlers.SysLogHandler(address = '/dev/log')
-    formatter = logging.Formatter('dalibot: %(message)s')
-    handler.setFormatter(formatter)
-    syslog.addHandler(handler)
-
-    def log(message, loglevel):
-        if loglevel == 'critical':
-            print(message, file=stderr)
-            syslog.error(message)
-        elif loglevel == 'warning':
-            print(message, file=stderr)
-            syslog.warning(message)
-        elif loglevel == 'info':
-            print(message)
-            syslog.info(message)
-        elif loglevel == 'debug':
-            print(message)
-            syslog.debug(message)
-        else:
-            print(message)
-
     def print_body(inbound):
         try:
             print(f"inbound {uri}", json.dumps(inbound, indent=4), file=stderr)
@@ -62,7 +43,7 @@ def main(environ, start_response):
         print_body(inbound)
     if uri == '/telegram':
         service = 'telegram'
-        botName = '@' + telegram.getMe()['username']
+        global botName
         if 'HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN' not in environ:
             print_headers()
             print("Fatal:", service, "authorisation header not present", file=stderr)
@@ -167,9 +148,8 @@ if __name__ == '__main__':
         print("Debugging mode is on", file=stderr)
         httpd.secure_repr = False
     print(f'Opening socket on http://{config_ip}:{config_port}', file=stderr)
-    # to start the server asynchronously, call server.start()
-    # we use blocking serve_forever() here because we have no other jobs
     try:
         httpd.serve_forever()
     except OSError as e:
         print(e, file=stderr)
+        exit(1)

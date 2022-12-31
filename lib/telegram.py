@@ -1,6 +1,7 @@
 import requests
 from lib.config import *
 import threading
+from sys import stderr
 
 def setWebhook():
     telegram_url = webhooks['telegram'] + 'setWebhook'
@@ -132,5 +133,6 @@ if config_telegramOutgoingToken and config_telegramOutgoingWebhook:
     try:
         threading.Thread(target=setWebhook).start()
         threading.Thread(target=setMyCommands).start()
+        botName = '@' + getMe()['username']
     except ReadTimeout:
-        print("Telegram timeout")
+        print("Telegram timeout", file=stderr)
