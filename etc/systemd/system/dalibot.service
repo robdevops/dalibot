@@ -7,6 +7,10 @@ User=CHANGEME
 ExecStart=/home/CHANGEME/dalibot/bot.py
 Restart=on-failure
 RestartSec=30s
+StandardOutput=null
+StandardError=journal
+SyslogIdentifier=dalibot
+Environment=PYTHONUNBUFFERED=1
 
 [Install]
 WantedBy=multi-user.target
