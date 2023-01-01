@@ -3,25 +3,26 @@
 import gevent.monkey
 gevent.monkey.patch_all()
 from gevent import pywsgi
-import json, re
+import json, re, os
 import threading
 import logging, logging.handlers
 from sys import stderr
+from urllib.parse import urlparse
 
 from lib.config import *
 import lib.worker as worker
-if config_telegramOutgoingToken and config_telegramOutgoingWebhook:
+if config_telegramBotToken:
     import lib.telegram as telegram
     botName = telegram.botName
 
 def main(environ, start_response):
-    def print_body(inbound):
+    def print_body():
         try:
             print(f"inbound {uri}", json.dumps(inbound, indent=4), file=stderr)
         except Exception as e:
             print(e, "raw body: ", inbound, file=stderr)
 
-    def print_headers(environ):
+    def print_headers():
         for item in sorted(environ.items()):
             print(item, file=stderr)
 
@@ -39,9 +40,9 @@ def main(environ, start_response):
     uri = environ['PATH_INFO']
     inbound = json.loads(request_body)
     if debug:
-        print_headers(environ)
-        print_body(inbound)
-    if uri == '/telegram':
+        print_headers()
+        print_body()
+    if config_telegramOutgoingWebhook and uri == urlparse(config_telegramOutgoingWebhook).path:
         service = 'telegram'
         global botName
         if 'HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN' not in environ:
@@ -49,8 +50,9 @@ def main(environ, start_response):
             print("Fatal:", service, "authorisation header not present", file=stderr)
             return [b'<h1>Unauthorized</h1>']
         elif environ['HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN'] != config_telegramOutgoingToken:
+            tauth_header = environ['HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN']
             print_headers()
-            print("Fatal: Telegram authorisation header is present but incorrect. Expected:", config_telegramOutgoingToken, file=stderr)
+            print("Telegram auth expected:", config_telegramOutgoingToken, "got:", tauth_header, file=stderr)
             return [b'<h1>Unauthorized</h1>']
         if "message" not in inbound:
             return [b'Unsupported']
@@ -94,7 +96,7 @@ def main(environ, start_response):
             else:
                 print(f"[{service}]: unhandled message without text/photo/document", file=stderr)
                 return [b'<h1>Unhandled</h1>']
-    elif uri == '/slack':
+    elif config_slackOutgoingWebhook and uri == urlparse(config_slackOutgoingWebhook).path:
         service = 'slack'
         if 'token' not in inbound:
             print_body(inbound)
@@ -102,7 +104,7 @@ def main(environ, start_response):
             return [b'<h1>Unauthorized</h1>']
         elif inbound['token'] != config_slackOutgoingToken:
             print_body(inbound)
-            print("Fatal:", service, "authorisation is present but incorrect. Expected:", config_slackOutgoingToken, file=stderr)
+            print("Slack auth expected:", config_slackOutgoingToken, "got:", inbound['token'], file=stderr)
             return [b'<h1>Unauthorized</h1>']
         if 'type' in inbound:
             if inbound['type'] == 'url_verification':
@@ -143,6 +145,8 @@ def main(environ, start_response):
     return [b'']
 
 if __name__ == '__main__':
+    if os.getuid() == 0:
+        print("Running as superuser. This is not recommended.", file=stderr)
     httpd = pywsgi.WSGIServer((config_ip, config_port), main)
     if debug:
         print("Debugging mode is on", file=stderr)
