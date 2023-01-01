@@ -145,7 +145,8 @@ def prepare_image(image_url):
         lower = upper + crop
         im_cropped = im.crop((left, upper, right, lower))
         print("Cropped from " + str(im.size) + " to " + str(im_cropped.size))
-        im = im_backup = im_cropped
+        im = im_cropped
+        #im = im_backup = im_cropped
         cropped=True
     print("Saving as PNG")
     with io.BytesIO() as byte_stream:
@@ -157,7 +158,8 @@ def prepare_image(image_url):
         print("Resizing from {:,} px; {:,} bytes; factor: {:.3f}".format(im.size[0], filesize, size_deviation))
         new_width = new_height = im.size[0] / size_deviation**0.55
         # resize from original to preserve quality
-        im = im_backup.resize((int(new_width), int(new_height)))
+        # im = im_backup.resize((int(new_width), int(new_height)))
+        im = im.resize((int(new_width), int(new_height)))
         with io.BytesIO() as byte_stream:
             im.save(byte_stream, format='PNG')
             image_bytesio = byte_stream.getvalue()
