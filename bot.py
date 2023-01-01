@@ -18,44 +18,48 @@ if config_telegramBotToken:
 def main(environ, start_response):
     def print_body():
         try:
-            print(f"inbound {uri}", json.dumps(inbound, indent=4), file=stderr)
+            print(f"inbound {uri}", json.dumps(json.loads(request_body), indent=4), file=stderr)
         except Exception as e:
-            print(e, "raw body: ", inbound, file=stderr)
+            print(e, "raw body: ", request_body, file=stderr)
 
     def print_headers():
         for item in sorted(environ.items()):
             print(item, file=stderr)
 
-    file_id=False
+    uri = environ['PATH_INFO']
     request_body = environ['wsgi.input'].read()
-    user=''
-    userRealName=''
+    if 'CONTENT_TYPE' in environ and environ['CONTENT_TYPE'] == 'application/json':
+        inbound = json.loads(request_body)
 
-    # prepare response
+    # prepare response headers
     status = '200 OK'
     headers = [('Content-type', 'application/json')]
     start_response(status, headers)
 
-    # process request
-    uri = environ['PATH_INFO']
-    inbound = json.loads(request_body)
     if debug:
         print_headers()
         print_body()
+
+    # triage request - the Great Big If
+    file_id=False
+    user=''
+    userRealName=''
+
+    # Telegram
     if config_telegramOutgoingWebhook and uri == urlparse(config_telegramOutgoingWebhook).path:
         service = 'telegram'
         global botName
         if 'HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN' not in environ:
             print_headers()
-            print("Fatal:", service, "authorisation header not present", file=stderr)
-            return [b'<h1>Unauthorized</h1>']
+            print("Fatal:", "Telegram auth absent", file=stderr)
+            return [b'']
         elif environ['HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN'] != config_telegramOutgoingToken:
             tauth_header = environ['HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN']
             print_headers()
             print("Telegram auth expected:", config_telegramOutgoingToken, "got:", tauth_header, file=stderr)
-            return [b'<h1>Unauthorized</h1>']
+            return [b'']
         if "message" not in inbound:
-            return [b'Unsupported']
+            return [b'']
         else:
             message_id = str(inbound["message"]["message_id"])
             chat_id = str(inbound["message"]["chat"]["id"])
@@ -71,11 +75,11 @@ def main(environ, start_response):
                     print(user, userRealName, user_id, "is whitelisted for private message")
                 else:
                     print(user, userRealName, user_id, "is not whitelisted. Ignoring.", file=stderr)
-                    return [b'<h1>Unauthorized</h1>']
-            file_id=False
+                    return [b'']
             if "text" in inbound["message"]:
                 message = inbound["message"]["text"]
                 print(f"[Telegram]:", user, message)
+                # under this condition we launch a worker thread
             elif "photo" in inbound["message"]:
                 message = ''
                 if "caption" in inbound["message"]:
@@ -83,35 +87,38 @@ def main(environ, start_response):
                 photo = inbound["message"]["photo"][-1]
                 file_id = photo["file_id"]
                 print(f"[Telegram photo]:", user, file_id, message)
+                # under this condition we launch a worker thread
             elif "document" in inbound["message"]:
                 mime_type = inbound["message"]["document"]["mime_type"]
                 if not mime_type.startswith('image/'):
-                    return [b'<h1>Unhandled</h1>']
                     print(f"[Telegram document unhandled mime_type]:", user, file_id, mime_type, message)
+                    return [b'']
                 message = ''
                 if "caption" in inbound["message"]:
                     message = inbound["message"]["caption"]
                 file_id = inbound["message"]["document"]["file_id"]
                 print(f"[Telegram document]:", user, file_id, mime_type, message)
+                # under this condition we launch a worker thread
             else:
-                print(f"[{service}]: unhandled message without text/photo/document", file=stderr)
-                return [b'<h1>Unhandled</h1>']
+                print(f"[{service}]: unhandled message without text/photo/document")
+                return [b'']
+    # Slack
     elif config_slackOutgoingWebhook and uri == urlparse(config_slackOutgoingWebhook).path:
         service = 'slack'
         if 'token' not in inbound:
-            print_body(inbound)
-            print("Fatal:", service, "authorisation header not present", file=stderr)
-            return [b'<h1>Unauthorized</h1>']
+            print_body()
+            print("Fatal:", "Slack auth absent", file=stderr)
+            return [b'']
         elif inbound['token'] != config_slackOutgoingToken:
-            print_body(inbound)
+            print_body()
             print("Slack auth expected:", config_slackOutgoingToken, "got:", inbound['token'], file=stderr)
-            return [b'<h1>Unauthorized</h1>']
+            return [b'']
         if 'type' in inbound:
             if inbound['type'] == 'url_verification':
                 response = json.dumps({"challenge": inbound["challenge"]})
-                print("Incoming verificarion challenge. Replying with", response)
+                print("Incoming verificarion challenge. Replying with", response, file=stderr)
                 response = bytes(response, "utf-8")
-                return [response]
+                return [b'']
             if inbound['type'] == 'event_callback':
                 message_id = str(inbound["event"]["ts"])
                 message = inbound['event']['text']
@@ -123,16 +130,16 @@ def main(environ, start_response):
                 print(f"[{service}]:", service, user, message)
                 # under this condition we launch a worker thread
             else:
-                print(f"[{service}]: unhandled 'type'", file=stderr)
-                return [b'<h1>Unhandled</h1>']
+                print(f"[{service}]: unhandled 'type'")
+                return [b'']
         else:
-            print(f"[{service}]: unhandled: no 'type'", file=stderr)
-            return [b'Unhandled']
+            print(f"[{service}]: unhandled: no 'type'")
+            return [b'']
     else:
         print("Unknown URI", uri, file=stderr)
         status = "404 Not Found"
         start_response(status, headers)
-        return [b'<h1>404</h1>']
+        return [b'']
 
     def runWorker():
         worker.process_request(service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id)
@@ -141,7 +148,7 @@ def main(environ, start_response):
     t = threading.Thread(target=runWorker)
     t.start()
 
-    # Return an empty response to the client
+    # Meanwhile, return an empty response to the client
     return [b'']
 
 if __name__ == '__main__':
