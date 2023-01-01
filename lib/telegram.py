@@ -1,19 +1,18 @@
 import requests
 from lib.config import *
-import threading
 from sys import stderr
+import concurrent.futures
 
 def setWebhook():
     telegram_url = webhooks['telegram'] + 'setWebhook'
-    params = {
-        "url": config_telegramOutgoingWebhook, "allowed_updates": "message", 'secret_token': config_telegramOutgoingToken}
+    params = { "url": config_telegramOutgoingWebhook, "allowed_updates": "message", 'secret_token': config_telegramOutgoingToken}
     #params = {"url": ''} # unsubscribe
     r = requests.post(
         telegram_url,
         params=params,
         timeout=config_http_timeout
     )
-    print("Registering Telegram webhook:", r.text)
+    print("Registering Telegram webhook:", r.text, file=stderr)
 
 def getMe():
     telegram_url = webhooks['telegram'] + 'getMe'
@@ -127,12 +126,11 @@ def setMyCommands():
     if not r.status_code == 200:
         print(r.status_code, "error outbound to Telegram")
         return False
-    print("Registering Telegram bot commands:", r.text)
+    print("Registering Telegram bot commands:", r.text, file=stderr)
 
-if config_telegramOutgoingToken and config_telegramOutgoingWebhook:
-    try:
-        threading.Thread(target=setWebhook).start()
-        threading.Thread(target=setMyCommands).start()
-        botName = '@' + getMe()['username']
-    except ReadTimeout:
-        print("Telegram timeout", file=stderr)
+if config_telegramBotToken:
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        executor.submit(setWebhook)
+        executor.submit(setMyCommands)
+        thread = executor.submit(getMe)
+        botName = '@' + thread.result()['username']
