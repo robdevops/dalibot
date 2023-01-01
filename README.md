@@ -24,7 +24,6 @@ Telegram chat bot for [DALL·E 2](https://openai.com/dall-e-2/)
 * An [OpenAI API key](https://beta.openai.com/account/api-keys)
 * Python 3.8.10+
   * gevent
-  * openai
   * pillow
   * requests
 
@@ -40,7 +39,7 @@ git clone https://github.com/robdevops/dalibot.git ~/dalibot
 ```
 * Install the Python modules
 ```
-pip3 install gevent openai pillow requests
+pip3 install gevent pillow requests
 ```
 * Point your web server at the listener. Example Nginx config:
 ```

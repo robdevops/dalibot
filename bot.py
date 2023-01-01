@@ -5,7 +5,6 @@ gevent.monkey.patch_all()
 from gevent import pywsgi
 import json, re, os
 import threading
-import logging, logging.handlers
 from sys import stderr
 from urllib.parse import urlparse
 

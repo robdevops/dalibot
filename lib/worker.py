@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 
 import io
-import openai
 import requests
 import time
 from PIL import Image
@@ -10,6 +9,7 @@ import threading
 
 from lib.config import *
 import lib.telegram as telegram
+import lib.openai as openai
 
 def process_request(service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id=False):
     now = int(time.time())
@@ -27,7 +27,11 @@ def process_request(service, chat_id, user, message, botName, userRealName, chat
                 error_to_telegram(chat_id, message, message_id)
                 return
             print("Sending image to OpenAI")
-            success, image_url = image_variation(image_data)
+            if debug:
+                size='256x256'
+            else:
+                size='1024x1024'
+            success, image_url = openai.imagesVariations(image_data, size, 4)
             if success:
                 print("Sending result to Telegram")
                 if cropped:
@@ -35,10 +39,13 @@ def process_request(service, chat_id, user, message, botName, userRealName, chat
                 telegram.sendMediaGroup(chat_id, image_url, message)
                 if config_archive:
                     if isinstance(image_url, list):
-                        for idx, url in enumerate(image_url):
-                            filename = config_archive_dir + '/variation_' + str(now) + '_' + str(idx+1) + '.png'
-                            threading.Thread(target=url_to_file(url, filename)).start()
-                        print("end of batch")
+                        def archive_url_list(image_url):
+                            for idx, url in enumerate(image_url):
+                                filename = config_archive_dir + '/variation_' + str(now) + '_' + str(idx+1) + '.png'
+                                threading.Thread(target=url_to_file(url, filename)).start()
+                                print("meanwhile...")
+                            print("end of batch")
+                        threading.Thread(target=archive_url_list(image_url)).start()
                     else:
                         filename = config_archive_dir + '/image_variation_' + str(now) + '.png'
                         image_bytesio = download_file(image_url)
@@ -52,7 +59,11 @@ def process_request(service, chat_id, user, message, botName, userRealName, chat
             message = message.replace(botName, '').replace('/dream', '').strip()
             if len(message.split()) > 2:
                 print("Sending prompt to OpenAI")
-                success, image_url = generate_image(message)
+                if debug:
+                    size='256x256'
+                else:
+                    size='1024x1024'
+                success, image_url = openai.imagesGenerations(message, size, 1)
                 if success:
                     print("Sending result to Telegram")
                     telegram.sendPhoto(chat_id, image_url, message)
@@ -65,48 +76,6 @@ def process_request(service, chat_id, user, message, botName, userRealName, chat
                     error_to_telegram(chat_id, message, message_id)
             else:
                 print("Prompt was too short - ignoring")
-
-def generate_image(message):
-    if 'config_openai_organization' in globals():
-        openai.organization = config_openai_organization
-    openai.api_key = config_openai_api_key
-    if debug:
-        config_size="256x256"
-    else:
-        config_size="1024x1024"
-    try:
-        response = openai.Image.create(
-        prompt=message,
-        n=1,
-        size=config_size
-        )
-        image_url = response['data'][0]['url']
-    except openai.error.OpenAIError as e:
-        print(e.http_status, e.error, file=stderr)
-        return False, e.error['message']
-    return True, image_url
-
-def image_variation(image_data):
-    if 'config_openai_organization' in globals():
-        openai.organization = config_openai_organization
-    openai.api_key = config_openai_api_key
-    if debug:
-        config_size="256x256"
-    else:
-        config_size="1024x1024"
-    try:
-        response = openai.Image.create_variation(
-          image=image_data,
-          n=4,
-          size=config_size
-        )
-        url_list = []
-        for item in response['data']:
-            url_list.append(item['url'])
-    except openai.error.OpenAIError as e:
-        print(e.http_status, e.error, file=stderr)
-        return False, e.error['message']
-    return True, url_list
 
 def download_file(image_url):
     r = requests.get(image_url, timeout=config_http_timeout)
