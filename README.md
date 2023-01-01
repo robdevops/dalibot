@@ -16,7 +16,7 @@ Telegram chat bot for [DALL·E 2](https://openai.com/dall-e-2/)
 * Run `bot.py` to start the listener. By default, it listens on http://127.0.0.1:5000
 * The prompt must be three or more words
 * The prompt must begin with `/dream`. Alternatively, @mention the bot if it has admin access in the group.
-* The bot only responds in group chats, unless you set `telegramAllowedUserIDs` in dalibot.conf
+* The bot only responds in group chats, unless you set `telegramAllowedUserIDs` in dalibot.ini
 
 # Requirements
 * A web server with a valid domain name and certificate
@@ -63,12 +63,12 @@ server {
 ```
 * Copy and edit the example config
 ```
-cp dalibot.conf.template dalibot.conf
+cp dalibot.ini.template dalibot.ini
 ```
 ![Screenshot of chat with Dalibot](doc/dali_3.png?raw=true "girl with a pearl earring by Johannes Vermeer in the style of 8-bit pixel art")
 
 # Config
-Config is via dalibot.conf
+Config is via dalibot.ini
 
 Mandatory parameters:
 * Set `openai_api_key` to the [key from OpenAI](https://beta.openai.com/account/api-keys)
@@ -130,13 +130,17 @@ Enable and start the bot:
 ```
 sudo systemctl enable dalibot --now
 ```
+You can now monitor the bot's stderr with :
+```
+journalctl -fu dalibot
+```
 
 # Security
 * Protect your API keys and bot tokens from other users on the system:
 ```
-chmod 600 dalibot.conf
+chmod 600 dalibot.ini
 ```
-* Because Telegram bots are discoverable by anyone, the bot ignores private messages by default. You can whitelist users in dalibot.conf. User IDs can be obtained from the URL bar when messaging a user on https://web.telegram.org/, or from the bots console output when someone messages it. Example config:
+* Because Telegram bots are discoverable by anyone, the bot ignores private messages by default. You can whitelist users in dalibot.ini. User IDs can be obtained from the URL bar when messaging a user on https://web.telegram.org/, or from the bots console output when someone messages it. Example config:
 ```
 telegramAllowedUserIDs = 123456789 987654321
 ```

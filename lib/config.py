@@ -5,7 +5,7 @@ import os
 
 config = configparser.ConfigParser()
 bot_dir = os.path.realpath(os.path.dirname(__file__) + '/../')
-config.read(bot_dir + '/dalibot.conf')
+config.read(bot_dir + '/dalibot.ini')
 config['DEFAULT'] = {
                      'archive': False,
                      'archive_dir': 'var/cache',

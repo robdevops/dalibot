@@ -132,6 +132,7 @@ __pycache__/
 *.bak
 todo.txt
 script.zip
-.env
 var/cache/*
-dalibot.conf
+.env
+*.conf
+*.ini
