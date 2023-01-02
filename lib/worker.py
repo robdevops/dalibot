@@ -3,7 +3,6 @@
 import io
 import requests
 import time
-from PIL import Image
 from sys import stderr
 import threading
 
@@ -96,6 +95,7 @@ def bytesio_to_file(image_bytesio, filename):
         print("Saved", filename)
 
 def prepare_image(image_url):
+    from PIL import Image
     print("Opening image")
     try:
         im = Image.open(requests.get(image_url, stream=True, timeout=config_http_timeout).raw)
