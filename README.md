@@ -12,12 +12,6 @@ Telegram chat bot for [DALL·E 2](https://openai.com/dall-e-2/)
 * Optionally archive OpenAI results to local storage
 * For speed and cost benefits, OpenAI images do not pass through the bot (unless you enable archiving)
 
-# Usage
-* Run `bot.py` to start the listener. By default, it listens on http://127.0.0.1:5000
-* The prompt must be three or more words
-* The prompt must begin with `/dream`. Alternatively, @mention the bot if it has admin access in the group.
-* The bot only responds in group chats, unless you set `telegramAllowedUserIDs` in dalibot.ini
-
 # Requirements
 * A web server with a valid domain name and certificate
 * A Telegram bot token from [BotFather](https://core.telegram.org/bots/tutorial)
@@ -26,6 +20,12 @@ Telegram chat bot for [DALL·E 2](https://openai.com/dall-e-2/)
   * gevent
   * pillow
   * requests
+
+# Usage
+* Run `bot.py` to start the listener. By default, it listens on http://127.0.0.1:5000
+* The prompt must be three or more words
+* The prompt must begin with `/dream`. Alternatively, @mention the bot if it has admin access in the group.
+* The bot only responds in group chats, unless you set `telegramAllowedUserIDs` in dalibot.ini
 
 ![Screenshot of chat with Dalibot](doc/dali_2.png?raw=true "an impressionist oil painting of sunflowers in a purple vase")
 
@@ -110,7 +110,8 @@ port = 5000
 
 # Daemonize
 
-There is an example systemd unit file `etc/systemd/system/dalibot.service` to start dalibot in the background at boot. Copy it to /etc
+There is an example systemd unit file `etc/systemd/system/dalibot.service` to start dalibot in the background at boot. 
+Copy it to /etc/systemd/system:
 ```
 sudo cp -v ~/dalibot/etc/systemd/system/dalibot.service /etc/systemd/system/
 ```
