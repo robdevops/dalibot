@@ -38,13 +38,10 @@ def process_request(service, chat_id, user, message, botName, userRealName, chat
                 telegram.sendMediaGroup(chat_id, image_url, message)
                 if config_archive:
                     if isinstance(image_url, list):
-                        def archive_url_list(image_url):
-                            for idx, url in enumerate(image_url):
-                                filename = config_archive_dir + '/variation_' + str(now) + '_' + str(idx+1) + '.png'
-                                threading.Thread(target=url_to_file(url, filename)).start()
-                                print("meanwhile...")
-                            print("end of batch")
-                        threading.Thread(target=archive_url_list(image_url)).start()
+                        for idx, url in enumerate(image_url):
+                            filename = config_archive_dir + '/variation_' + str(now) + '_' + str(idx+1) + '.png'
+                            threading.Thread(target=url_to_file(url, filename)).start()
+                        print("end of batch")
                     else:
                         filename = config_archive_dir + '/image_variation_' + str(now) + '.png'
                         image_bytesio = download_file(image_url)
@@ -95,7 +92,12 @@ def bytesio_to_file(image_bytesio, filename):
         print("Saved", filename)
 
 def prepare_image(image_url):
-    from PIL import Image
+    try:
+        from PIL import Image
+    except ModuleNotFoundError:
+        message = "This feature requires the pillow library to be installed"
+        print("message", file=stderr)
+        return False, False, message
     print("Opening image")
     try:
         im = Image.open(requests.get(image_url, stream=True, timeout=config_http_timeout).raw)
