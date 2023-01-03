@@ -66,10 +66,7 @@ server {
     }
 }
 ```
-If you wish to have this telegram ACL dynamically update, you can uncomment the `include /etc/nginx/telegram_subnets` line, and run `sudo etc/cron.daily/nginx_telegram_cron` once, or install it as a cron job:
-```
-sudo cp -v etc/cron.daily/nginx_telegram_cron /etc/cron.daily/
-```
+If you wish to have the above telegram ACL dynamically update, you can uncomment the `include` line, and run `sudo etc/cron.daily/nginx_telegram_cron` once, or install it as a cron job with `sudo cp -v etc/cron.daily/nginx_telegram_cron /etc/cron.daily/`
 
 If running on AWS Lambda behind AWS API Gateway, the following mapping template should go under _POST - Integration Request > Mapping Templates > application/json_. This is required to route incoming requests to the appropriate chat network, and to authenticate Telegram's `X-Telegram-Bot-Api-Secret-Token` header against your configured `telegramOutgoingToken` value.
 ```
