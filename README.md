@@ -65,6 +65,7 @@ server {
         deny all;
     }
 }
+```
 If you wish to have this telegram ACL dynamically update, you can uncomment the `include /etc/nginx/telegram_subnets` line, and run `sudo etc/cron.daily/nginx_telegram_cron` once, or install it as a cron job:
 ```
 sudo cp -v etc/cron.daily/nginx_telegram_cron /etc/cron.daily/
@@ -84,7 +85,6 @@ If running on AWS Lambda behind AWS API Gateway, the following mapping template 
 }
 ```
 
-```
 * Copy and edit the example config
 ```
 cp dalibot.ini.template dalibot.ini
