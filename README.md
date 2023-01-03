@@ -71,14 +71,14 @@ If you wish to have the above telegram ACL dynamically update, you can uncomment
 * If running on AWS Lambda behind AWS API Gateway, the following mapping template should go under _POST - Integration Request > Mapping Templates > application/json_. This is required to route incoming requests to the appropriate chat network, and to authenticate Telegram's `X-Telegram-Bot-Api-Secret-Token` header against your configured `telegramOutgoingToken` value.
 ```
 {
-    "method": "$context.httpMethod",
     "path": "$context.path",
-    "body" : $input.json('$'),
+    "method": "$context.httpMethod",
     "headers": {
         #foreach($param in $input.params().header.keySet())
             "$param": "$util.escapeJavaScript($input.params().header.get($param))" #if($foreach.hasNext),#end
         #end
-    }
+    },
+    "body": $input.json('$')
 }
 ```
 
