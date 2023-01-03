@@ -167,7 +167,7 @@ chmod 600 dalibot.ini
 telegramAllowedUserIDs = 123456789 987654321
 ```
 * To prevent unauthorized use, it's recommended to message `/setjoingroups` to BotFather and set it to `Disabled` after you have added your bot to the desired group(s).
-* Only allow connections from Telegram's subnet `91.108.4.0/22` as per the example Nginx config.
+* Only allow connections from Telegram's subnets as per the example Nginx config.
 * Set `telegramOutgoingToken` to a strong value to prevent another bot being used to access your URL.
 
 ![Screenshot of chat with Dalibot](doc/dali_5.png?raw=true "a painting of a fox sitting in a field at sunrise in the style of Claude Monet")
