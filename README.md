@@ -8,9 +8,9 @@ Telegram chat bot for [DALL·E 2](https://openai.com/dall-e-2/)
 ![Screenshot of chat with Dalibot](doc/dali_1.png?raw=true "close up portrait of a girl in the style of Claude Monet")
 
 # Features
-* Auto-crop and resize uploaded images to meet OpenAI requirements
+* Auto convert, crop, and resize uploaded images to meet OpenAI requirements
 * Optionally archive OpenAI results to local storage
-* For speed and cost benefits, OpenAI images do not pass through the bot (unless you enable archiving)
+* For speed and cost benefits, OpenAI image data does not pass through the bot. Only the URL does (unless you enable archiving)
 
 # Requirements
 * A web server with a valid domain name and certificate
@@ -47,21 +47,43 @@ pip3 install -r requirements.txt
 * Point your web server at the listener. Example Nginx config:
 ```
 server {
-	listen 8443 ssl;
-	deny all;
+    listen 8443 ssl;
+    server_name         www.example.com;
+    ssl_certificate     /etc/letsencrypt/live/www.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/www.example.com/privkey.pem;
+    ssl_protocols       TLSv1 TLSv1.1 TLSv1.2;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
 
-	server_name         www.example.com;
-	ssl_certificate     /etc/letsencrypt/live/www.example.com/fullchain.pem;
-	ssl_certificate_key /etc/letsencrypt/live/www.example.com/privkey.pem;
-	ssl_protocols       TLSv1 TLSv1.1 TLSv1.2;
-	ssl_ciphers         HIGH:!aNULL:!MD5;
-
-	location /telegram {
-		proxy_pass http://127.0.0.1:5000/telegram;
-		allow 91.108.4.0/22
-		deny all;
-	}
+    location /telegram {
+        proxy_pass http://127.0.0.1:5000/telegram;
+        allow 91.108.4.0/22;
+        allow 91.108.56.0/24;
+        allow 149.154.160.0/22;
+        allow 149.154.164.0/22;
+        allow 149.154.172.0/22;
+        #include /etc/nginx/telegram_subnets;
+        deny all;
+    }
 }
+If you wish to have this telegram ACL dynamically update, you can uncomment the `include /etc/nginx/telegram_subnets` line, and run `sudo etc/cron.daily/nginx_telegram_cron` once, or install it as a cron job:
+```
+sudo cp -v etc/cron.daily/nginx_telegram_cron /etc/cron.daily/
+```
+
+If running on AWS Lambda behind AWS API Gateway, the following mapping template should go under _POST - Integration Request > Mapping Templates > application/json_. This is required to route incoming requests to the appropriate chat network, and to authenticate Telegram's `X-Telegram-Bot-Api-Secret-Token` header against your configured `telegramOutgoingToken` value.
+```
+{
+    "method": "$context.httpMethod",
+    "path": "$context.path",
+    "body" : $input.json('$'),
+    "headers": {
+        #foreach($param in $input.params().header.keySet())
+            "$param": "$util.escapeJavaScript($input.params().header.get($param))" #if($foreach.hasNext),#end
+        #end
+    }
+}
+```
+
 ```
 * Copy and edit the example config
 ```
