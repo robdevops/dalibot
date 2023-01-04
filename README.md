@@ -27,13 +27,9 @@ Telegram chat bot for [DALL·E 2](https://openai.com/dall-e-2/)
 * The prompt must begin with `/dream`. Alternatively, @mention the bot if it has admin access in the group.
 * The bot only responds in group chats, unless you set `telegramAllowedUserIDs` in dalibot.ini
 
-![Screenshot of chat with Dalibot](doc/dali_2.png?raw=true "an impressionist oil painting of sunflowers in a purple vase")
-
 # Setup
 * If managing your own web server, see [WSGI setup](doc/standalone.md)
 * If running serverless, see [cloud function setup](doc/serverless.md)
-
-![Screenshot of chat with Dalibot](doc/dali_4.png?raw=true "cute watermelon smiling")
 
 # Security
 * If not running serverless, protect your API keys and bot tokens from other users on the system:
