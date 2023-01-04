@@ -1,4 +1,7 @@
 # Setup - standalone (Python WSGI server)
+
+![Screenshot of chat with Dalibot](dali_2.png?raw=true "an impressionist oil painting of sunflowers in a purple vase")
+
 * Clone the git repo
 ```
 sudo $(which apt dnf yum) install git
