@@ -73,7 +73,7 @@ Example:
 openai_api_key = sk-p999HAfj6Cm1bO00SXgJc7kFxvFPtQ1KBBWrqSOU
 telegramBotToken = 4839574812:AAFD39kkdpWt3ywyRZergyOLMaJhac60qc
 telegramOutgoingToken = sLnHdQmYoohmysecret7PX5VDM4cPW
-telegramOutgoingWebhook = https://kgah94bla2.execute-api.us-east-2.amazonaws.com/dalibot
+telegramOutgoingWebhook = https://xxxxxx.execute-api.us-east-2.amazonaws.com/dalibot
 ```
 
 Optional parameters:
