@@ -20,19 +20,19 @@ download(){
 }
 
 non_zero() {
-	test -s $staging
+    test -s $staging
 }
 
 newer() {
-	test $staging -nt $live
+    test $staging -nt $live
 }
 
 different() {
-	! cmp --silent $staging $live
+    ! cmp --silent $staging $live
 }
 
 valid() {
-	nginx -qt
+    nginx -qt
 }
 
 reload_nginx() {
@@ -40,23 +40,23 @@ reload_nginx() {
 }
 
 if [[ ! -f $live ]]; then
-	set -e
-	download
-	non_zero
-	cp $staging $live
+    set -e
+    download
+    non_zero
+    cp $staging $live
 else
-	set -e
-	download
-	non_zero
-	newer
-	different
-	cp $live $backup
-	cp $staging $live
+    set -e
+    download
+    non_zero
+    newer
+    different
+    cp $live $backup
+    cp $staging $live
 fi
 
 if valid; then
-	reload_nginx
+    reload_nginx
 else
-	cp $backup $live
+    cp $backup $live
 fi
 
