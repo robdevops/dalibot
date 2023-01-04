@@ -30,8 +30,8 @@ Telegram chat bot for [DALL·E 2](https://openai.com/dall-e-2/)
 ![Screenshot of chat with Dalibot](doc/dali_2.png?raw=true "an impressionist oil painting of sunflowers in a purple vase")
 
 # Setup
-* If managing your own web server, see [WSGI setup](docs/standalone.md)
-* If running serverless, see [cloud function setup](docs/serverless.md)
+* If managing your own web server, see [WSGI setup](doc/standalone.md)
+* If running serverless, see [cloud function setup](doc/serverless.md)
 
 ![Screenshot of chat with Dalibot](doc/dali_4.png?raw=true "cute watermelon smiling")
 
