@@ -20,8 +20,8 @@ Go to the [API Gateway console](https://us-east-2.console.aws.amazon.com/apigate
 * From the _Action_ menu, Create a method of type _POST_
   * Enter your Lambda function name and _Save_.
 * Under your method > _Integration Request_:
-  * Expand _HTTP Headers_. Add a header named _X-Amz-Invocation-Type_ mapped from _'Event'_ (with quotes). This tells Lambda to process incoming requests asyncronously, preventing duplicate notifications from Telegram.
-  * Expand _Mapping Templates_ and add a mapping template for Content-Type _application/json_. Scroll down and enter the following mappings and _Save_. This allows the bot to route the request appropriately, and read Telegram's auth header:
+  * Expand _HTTP Headers_. Add a header named `X-Amz-Invocation-Type` mapped from `'Event'` (with quotes). This tells Lambda to process incoming requests asyncronously, preventing duplicate notifications from Telegram.
+  * Expand _Mapping Templates_ and add a mapping template for Content-Type `application/json`. Scroll down and enter the following mappings and _Save_. This allows the bot to route the request appropriately, and read Telegram's auth header:
 ```
 {
     "method": "$context.httpMethod",
@@ -94,7 +94,7 @@ zip -r script.zip .
 * The function can also be triggered in various ways, but these will not be end-to-end tests:
   * From the _Test_ tab in the Lambda function
   * From the POST - Method execution in API Gateway console.
-  * With curl, for examaple:
+  * With curl, for example:
   ```
   curl -iH "Content-Type: application/json" -H "X-Telegram-Bot-Api-Secret-Token: yoursecret" -X POST -d '{"message": {"message_id": 1, "from": {"id": 1, "first_name": "test" }, "chat": {"id": 123, "type": "private"}, "text": "hello" }}' https://xxxxxx.execute-api.us-east-2.amazonaws.com/dalibot
   ```
