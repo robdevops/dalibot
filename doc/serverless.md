@@ -4,14 +4,14 @@ The bot should also work as an Azure Function or a Google Cloud Function, but it
 ## Create the Lambda function
 Go to the [Lambda console](https://us-east-2.console.aws.amazon.com/lambda/home)
 * Create a function
-  ** Function name: dalibot
-  ** In the _Runtime_ drop down menu, select the latest Python
-  ** Click _Create Function_
+  * Function name: dalibot
+  * In the _Runtime_ drop down menu, select the latest Python
+  * Click _Create Function_
 * Scroll down to _Runtime settings_ and _Edit_
-  ** Change _Handler_ to _bot.lambda_handler_ and _Save_
+  * Change _Handler_ to _bot.lambda_handler_ and _Save_
 * Go to the _Configuration_ tab
-  ** Go to _General configuration_ and _Edit_
-    ** Change Timeout to _1 min_ and _Save_
+  * Go to _General configuration_ and _Edit_
+    * Change Timeout to _1 min_ and _Save_
 
 ## Create the API Gateway
 Go to the [API Gateway console](https://us-east-2.console.aws.amazon.com/apigateway/home)
@@ -59,10 +59,10 @@ cp dalibot.ini.template dalibot.ini
 ```
 
 * Edit dalibot.ini. Mandatory parameters:
-* Set `openai_api_key` to the [key from OpenAI](https://beta.openai.com/account/api-keys)
-* Set `telegramOutgoingToken` to a [secret token of your choice](https://core.telegram.org/bots/api#setwebhook)
-* Set `telegramOutgoingWebhook` to the URL of your Amazon API Gateway stage
-* Set `telegramBotToken` to the token provided by [BotFather](https://core.telegram.org/bots/tutorial)
+  * Set `openai_api_key` to the [key from OpenAI](https://beta.openai.com/account/api-keys)
+  * Set `telegramOutgoingToken` to a [secret token of your choice](https://core.telegram.org/bots/api#setwebhook)
+  * Set `telegramOutgoingWebhook` to the URL of your Amazon API Gateway stage
+  * Set `telegramBotToken` to the token provided by [BotFather](https://core.telegram.org/bots/tutorial)
 
 Example:
 ```
@@ -91,9 +91,9 @@ zip -r script.zip .
 ## Testing and troubleshooting
 * Message the bot, then monitor the logs from _Monitor > Logs_ in the function, or from the [CloudWatch console](https://us-east-2.console.aws.amazon.com/cloudwatch/home) under _Logs_ > _Log groups_.
 * The function can also be triggered in various ways, but these will not be end-to-end tests:
-  ** From the _Test_ tab in the Lambda function
-  ** From the POST - Method execution in API Gateway console.
-  ** With curl, for examaple:
+  * From the _Test_ tab in the Lambda function
+  * From the POST - Method execution in API Gateway console.
+  * With curl, for examaple:
   ```
   curl -iH "Content-Type: application/json" -H "X-Telegram-Bot-Api-Secret-Token: yoursecret" -X POST -d '{"message": {"message_id": 1, "from": {"id": 1, "first_name": "test" }, "chat": {"id": 123, "type": "private"}, "text": "hello" }}' https://xxxxxx.execute-api.us-east-2.amazonaws.com/dalibot
   ```
