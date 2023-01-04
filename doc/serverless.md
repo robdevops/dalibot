@@ -1,6 +1,9 @@
 # Setup - AWS Lambda
 The bot should also work as an Azure Function or a Google Cloud Function, but it has not been tested, and the setup procedure will vary, although principles remain the same.
 
+![Screenshot of chat with Dalibot](dali_4.png?raw=true "cute watermelon smiling")
+
+
 ## Create the Lambda function
 Go to the [Lambda console](https://us-east-2.console.aws.amazon.com/lambda/home)
 * Create a function
