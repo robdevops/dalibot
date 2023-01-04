@@ -16,6 +16,7 @@ Go to the [Lambda console](https://us-east-2.console.aws.amazon.com/lambda/home)
 ## Create the API Gateway
 Go to the [API Gateway console](https://us-east-2.console.aws.amazon.com/apigateway/home)
 * Create an API of type _REST API_
+  * API Name: dalibot
 * From the _Action_ menu, Create a method of type _POST_
   * Enter your Lambda function name and _Save_.
 * Under your method > _Integration Request_:
