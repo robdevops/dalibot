@@ -65,7 +65,7 @@ cp dalibot.ini.template dalibot.ini
 * Edit dalibot.ini. Mandatory parameters:
   * Set `openai_api_key` to the [key from OpenAI](https://beta.openai.com/account/api-keys)
   * Set `telegramOutgoingToken` to a [secret token of your choice](https://core.telegram.org/bots/api#setwebhook)
-  * Set `telegramOutgoingWebhook` to the URL of your Amazon API Gateway stage
+  * Set `telegramOutgoingWebhook` to your API gateway stage Invoke URL from previous section
   * Set `telegramBotToken` to the token provided by [BotFather](https://core.telegram.org/bots/tutorial)
 
 Example:
