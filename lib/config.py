@@ -5,6 +5,7 @@ import os
 
 config = configparser.ConfigParser()
 bot_dir = os.path.realpath(os.path.dirname(__file__) + '/../')
+os.chdir(bot_dir)
 config.read(bot_dir + '/dalibot.ini')
 config['DEFAULT'] = {
                      'archive': False,
@@ -30,6 +31,7 @@ config_openai_api_key = config['main'].get('openai_api_key', False)
 config_openai_organization = config['main'].get('openai_organization', False)
 config_slackOAuthToken = config['main'].get('slackOAuthToken', False)
 config_slackOutgoingToken = config['main'].get('slackOutgoingToken', False)
+config_slackOutgoingWebhook = config['main'].get('slackOutgoingWebhook', False)
 config_ip = config['main']['ip']
 config_port = int(config['main']['port'])
 config_max_upload_size = int(config['main']['max_upload_size'])

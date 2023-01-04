@@ -5,8 +5,12 @@ import concurrent.futures
 
 def setWebhook():
     telegram_url = webhooks['telegram'] + 'setWebhook'
-    params = { "url": config_telegramOutgoingWebhook, "allowed_updates": "message", 'secret_token': config_telegramOutgoingToken}
-    #params = {"url": ''} # unsubscribe
+    params = {}
+    params['url'] = config_telegramOutgoingWebhook
+    #params['url'] = '' # unsubscribe
+    params['allowed_updates'] = message
+    params['drop_pending_updates'] = True
+    params['secret_token'] = config_telegramOutgoingToken
     r = requests.post(
         telegram_url,
         params=params,

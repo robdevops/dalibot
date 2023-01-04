@@ -72,6 +72,7 @@ def process_request(service, chat_id, user, message, botName, userRealName, chat
                     error_to_telegram(chat_id, message, message_id)
             else:
                 print("Prompt was too short - ignoring")
+    return
 
 def download_file(image_url):
     r = requests.get(image_url, timeout=config_http_timeout)
@@ -90,6 +91,7 @@ def bytesio_to_file(image_bytesio, filename):
         print(e, file=stderr)
     else:
         print("Saved", filename)
+    return
 
 def prepare_image(image_url):
     try:
@@ -140,7 +142,9 @@ def prepare_image(image_url):
 def url_to_file(url, filename):
     image_bytesio = download_file(url)
     bytesio_to_file(image_bytesio, filename)
+    return
 
 def error_to_telegram(chat_id, message, message_id):
     print("Sending error to Telegram")
     telegram.sendMessage(chat_id, message, message_id)
+    return

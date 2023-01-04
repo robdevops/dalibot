@@ -1,9 +1,15 @@
 #!/usr/bin/python3
 
-import gevent.monkey
-gevent.monkey.patch_all()
-from gevent import pywsgi
-import json, re, os
+import os
+if os.environ.get("AWS_LAMBDA_FUNCTION_NAME") is None:
+    print("we are running standalone!")
+    import gevent.monkey
+    gevent.monkey.patch_all()
+    from gevent import pywsgi
+else:
+    print("we are running on Lambda!")
+
+import json, re
 import threading
 from sys import stderr
 from urllib.parse import urlparse
@@ -14,31 +20,53 @@ if config_telegramBotToken:
     import lib.telegram as telegram
     botName = telegram.botName
 
-def main(environ, start_response):
-    def print_body():
-        try:
-            print(f"inbound {uri}", json.dumps(json.loads(request_body), indent=4), file=stderr)
-        except Exception as e:
-            print(e, "raw body: ", request_body, file=stderr)
+def lambda_handler(event, context):
+    if debug:
+        print(json.dumps(event, indent=4))
 
-    def print_headers():
-        for item in sorted(environ.items()):
-            print(item, file=stderr)
+    response = main(event)
+    if response:
+        return response
+    else: return ''
+
+def wsgi_handler(environ, start_response):
+    headers = {}
+    for h in sorted(environ.items()):
+        if not h[0].startswith('wsgi.'):
+            if h[0].startswith('HTTP_'):
+                header = h[0].lstrip('HTTP_').replace('_', '-').title()
+                headers[header] = h[1]
+            else:
+                headers[h[0]] = h[1]
 
     uri = environ['PATH_INFO']
-    request_body = environ['wsgi.input'].read()
-    if 'CONTENT_TYPE' in environ and environ['CONTENT_TYPE'] == 'application/json':
-        inbound = json.loads(request_body)
 
-    # prepare response headers
+    if 'CONTENT_TYPE' in environ and environ['CONTENT_TYPE'] == 'application/json':
+        body = json.loads(environ['wsgi.input'].read())
+    else:
+        for item in event['headers'].getitems():
+            print(item, file=stderr)
+        print("ignoring non-json request", file=stderr)
+        return b['']
+
+    event = { 'headers': headers, 'uri': uri, 'body': body }
+
+    if debug:
+        print(json.dumps(event, indent=4))
+
     status = '200 OK'
     headers = [('Content-type', 'application/json')]
     start_response(status, headers)
+    response = main(event)
+    if response:
+        response = bytes(response, "utf-8")
+        return [response]
+    else:
+        return [b'']
 
-    if debug:
-        print_headers()
-        print_body()
-
+def main(event):
+    inbound = event['body']
+    uri = event['uri']
     # triage request - the Great Big If
     file_id=False
     user=''
@@ -48,17 +76,15 @@ def main(environ, start_response):
     if config_telegramOutgoingWebhook and uri == urlparse(config_telegramOutgoingWebhook).path:
         service = 'telegram'
         global botName
-        if 'HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN' not in environ:
-            print_headers()
-            print("Fatal:", "Telegram auth absent", file=stderr)
-            return [b'']
-        elif environ['HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN'] != config_telegramOutgoingToken:
-            tauth_header = environ['HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN']
-            print_headers()
+        if 'X-Telegram-Bot-Api-Secret-Token' not in event['headers']:
+            print("Telegram auth absent", file=stderr)
+            return
+        elif event['headers']['X-Telegram-Bot-Api-Secret-Token'] != config_telegramOutgoingToken:
+            tauth_header = event['headers']['X-Telegram-Bot-Api-Secret-Token']
             print("Telegram auth expected:", config_telegramOutgoingToken, "got:", tauth_header, file=stderr)
-            return [b'']
+            return
         if "message" not in inbound:
-            return [b'']
+            return
         else:
             message_id = str(inbound["message"]["message_id"])
             chat_id = str(inbound["message"]["chat"]["id"])
@@ -74,7 +100,7 @@ def main(environ, start_response):
                     print(user, userRealName, user_id, "is whitelisted for private message")
                 else:
                     print(user, userRealName, user_id, "is not whitelisted. Ignoring.", file=stderr)
-                    return [b'']
+                    return
             if "text" in inbound["message"]:
                 message = inbound["message"]["text"]
                 print(f"[Telegram]:", user, message)
@@ -91,7 +117,7 @@ def main(environ, start_response):
                 mime_type = inbound["message"]["document"]["mime_type"]
                 if not mime_type.startswith('image/'):
                     print(f"[Telegram document unhandled mime_type]:", user, file_id, mime_type, message)
-                    return [b'']
+                    return
                 message = ''
                 if "caption" in inbound["message"]:
                     message = inbound["message"]["caption"]
@@ -100,24 +126,23 @@ def main(environ, start_response):
                 # under this condition we launch a worker thread
             else:
                 print(f"[{service}]: unhandled message without text/photo/document")
-                return [b'']
+                return
     # Slack
     elif config_slackOutgoingWebhook and uri == urlparse(config_slackOutgoingWebhook).path:
         service = 'slack'
         if 'token' not in inbound:
-            print_body()
+            print(json.dumps(event['body'], indent=4))
             print("Fatal:", "Slack auth absent", file=stderr)
-            return [b'']
+            return
         elif inbound['token'] != config_slackOutgoingToken:
-            print_body()
+            print(json.dumps(event['body'], indent=4))
             print("Slack auth expected:", config_slackOutgoingToken, "got:", inbound['token'], file=stderr)
-            return [b'']
+            return
         if 'type' in inbound:
             if inbound['type'] == 'url_verification':
                 response = json.dumps({"challenge": inbound["challenge"]})
                 print("Incoming verificarion challenge. Replying with", response, file=stderr)
-                response = bytes(response, "utf-8")
-                return [b'']
+                return response
             if inbound['type'] == 'event_callback':
                 message_id = str(inbound["event"]["ts"])
                 message = inbound['event']['text']
@@ -130,15 +155,13 @@ def main(environ, start_response):
                 # under this condition we launch a worker thread
             else:
                 print(f"[{service}]: unhandled 'type'")
-                return [b'']
+                return
         else:
             print(f"[{service}]: unhandled: no 'type'")
-            return [b'']
+            return
     else:
         print("Unknown URI", uri, file=stderr)
-        status = "404 Not Found"
-        start_response(status, headers)
-        return [b'']
+        return
 
     def runWorker():
         worker.process_request(service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id)
@@ -146,14 +169,23 @@ def main(environ, start_response):
     # process in a background thread so we don't keep the requesting client waiting
     t = threading.Thread(target=runWorker)
     t.start()
+    if os.environ.get("AWS_LAMBDA_FUNCTION_NAME") is not None:
+        """
+        lambda freezes the environment before the worker completes unless we wait here.
+        This breaks the whole purpose of threading.
+        Waiting causes the client to retry and duplicates to be recieved, unless
+        we turn on async for the Amazon API Gateway by adding header X-Amz-Invocation-Type
+        with value 'Event' (including quotes). This is not a final solution, because
+        it breaks our ability to respond, as is required for Slack verification requests.
+        """
+        t.join()
 
-    # Meanwhile, return an empty response to the client
-    return [b'']
+    return
 
 if __name__ == '__main__':
     if os.getuid() == 0:
         print("Running as superuser. This is not recommended.", file=stderr)
-    httpd = pywsgi.WSGIServer((config_ip, config_port), main)
+    httpd = pywsgi.WSGIServer((config_ip, config_port), wsgi_handler)
     if debug:
         print("Debugging mode is on", file=stderr)
         httpd.secure_repr = False

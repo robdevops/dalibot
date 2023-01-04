@@ -9,7 +9,7 @@ def imagesGenerations(prompt, size='256x256', number=1):
     headers = {'Content-type': 'application/json', 'Authorization': 'Bearer ' + config_openai_api_key}
     payload = {'prompt': prompt, 'size': size, 'n': number, 'response_format': 'url'}
     try:
-        r = requests.post(url, headers=headers, json=payload, timeout=config_http_timeout)
+        r = requests.post(url, headers=headers, json=payload, timeout=20)
     except requests.exceptions.ConnectionError as e:
         print("OpenAI:", e, file=stderr)
         return False, e
@@ -22,7 +22,7 @@ def imagesVariations(imagebytes, size='256x256', number=4):
     files = {"image": imagebytes}
     data = {'size': size, 'n': number, 'response_format': 'url'}
     try:
-        r = requests.post(url, headers=headers, data=data, files=files, timeout=30)
+        r = requests.post(url, headers=headers, data=data, files=files, timeout=20)
     except requests.exceptions.ConnectionError as e:
         print("OpenAI:", e, file=stderr)
         return False, e
