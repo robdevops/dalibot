@@ -57,7 +57,7 @@ cd ~/dalibot
 ```
 pip3 install requests pillow --upgrade --target=$(pwd)
 ```
-* Copy and edit the example config
+* Copy the example config
 ```
 cp dalibot.ini.template dalibot.ini
 ```
