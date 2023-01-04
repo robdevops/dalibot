@@ -11,6 +11,7 @@ config['DEFAULT'] = {
                      'archive': False,
                      'archive_dir': 'var/cache',
                      'telegramAllowedUserIDs': '',
+                     'telegramBotCommand': 'dream',
                      'http_timeout': 10,
                      'ip': '127.0.0.1',
                      'port': 5000,
@@ -23,6 +24,7 @@ config_archive_dir = config['main']['archive_dir'].rstrip('/')
 if not config_archive_dir.startswith('/'):
     config_archive_dir = bot_dir + '/' + config_archive_dir
 config_telegramAllowedUserIDs = config['main']['telegramAllowedUserIDs'].split()
+config_telegramBotCommand = config['main']['telegramBotCommand'].lstrip('/')
 config_telegramBotToken = config['main'].get('telegramBotToken', False)
 config_telegramOutgoingToken = config['main'].get('telegramOutgoingToken', False)
 config_telegramOutgoingWebhook = config['main'].get('telegramOutgoingWebhook', False)

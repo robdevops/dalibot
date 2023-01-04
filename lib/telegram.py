@@ -8,7 +8,7 @@ def setWebhook():
     params = {}
     params['url'] = config_telegramOutgoingWebhook
     #params['url'] = '' # unsubscribe
-    params['allowed_updates'] = message
+    params['allowed_updates'] = "message"
     params['drop_pending_updates'] = True
     params['secret_token'] = config_telegramOutgoingToken
     r = requests.post(
@@ -120,7 +120,7 @@ def sendMessage(chat_id, message, message_id=None):
 def setMyCommands():
     url = webhooks['telegram'] + "setMyCommands"
     headers = {'Content-type': 'application/json'}
-    command = [{'command': 'dream', 'description': 'generate an image from at least three words'}]
+    command = [{'command': config_telegramBotCommand, 'description': 'generate an image from at least three words'}]
     payload = {'commands': command}
     try:
         r = requests.post(url, headers=headers, json=payload, timeout=config_http_timeout)
