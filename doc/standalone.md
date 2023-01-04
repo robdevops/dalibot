@@ -37,15 +37,16 @@ server {
 ```
 If you wish to have the above telegram ACL dynamically update, you can uncomment the `include` line, and run `sudo etc/cron.daily/nginx_telegram_cron` once, or install it as a cron job with `sudo cp -v etc/cron.daily/nginx_telegram_cron /etc/cron.daily/`
 
-* Copy and edit the example config
+* Copy the example config
 ```
 cp dalibot.ini.template dalibot.ini
 ```
+
 * Edit dalibot.ini. Mandatory parameters:
-* Set `openai_api_key` to the [key from OpenAI](https://beta.openai.com/account/api-keys)
-* Set `telegramOutgoingToken` to a [secret token of your choice](https://core.telegram.org/bots/api#setwebhook)
-* Set `telegramOutgoingWebhook` to the URL of your Amazon API Gateway stage
-* Set `telegramBotToken` to the token provided by [BotFather](https://core.telegram.org/bots/tutorial)
+  * Set `openai_api_key` to the [key from OpenAI](https://beta.openai.com/account/api-keys)
+  * Set `telegramOutgoingToken` to a [secret token of your choice](https://core.telegram.org/bots/api#setwebhook)
+  * Set `telegramOutgoingWebhook` to the URL of your Amazon API Gateway stage
+  * Set `telegramBotToken` to the token provided by [BotFather](https://core.telegram.org/bots/tutorial)
 
 Example:
 ```
