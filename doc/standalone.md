@@ -65,7 +65,7 @@ debug = 1
 telegramBotCommand = dream
 ```
 
-Enable archiving to download OpenAI images to disk (defaults to `dalibot/var/cache`). Note: user uploads for variations
+Enable archiving to download OpenAI images to disk (defaults to `dalibot/var/cache`). Note: user uploads for variations are never saved.
 ```
 archive = 1
 archive_dir = var/cache
