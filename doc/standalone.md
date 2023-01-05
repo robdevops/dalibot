@@ -62,6 +62,7 @@ telegramOutgoingWebhook = https://www.example.com/dalibot
 Optional parameters:
 ```
 debug = 1
+telegramBotCommand = dream
 ```
 
 Enable archiving to download OpenAI images to disk (defaults to `dalibot/var/cache`). Note: user uploads for variations

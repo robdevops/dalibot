@@ -50,16 +50,14 @@ sudo $(which apt dnf yum) install git
 ```
 git clone https://github.com/robdevops/dalibot.git ~/dalibot
 ```
-* Install the Python modules
-```
+* Run the build script:
 cd ~/dalibot
+bash build_serverless.sh
 ```
 ```
-pip3 install requests pillow --upgrade --target=$(pwd)
+* Complete the config:
 ```
-* Copy the example config
-```
-cp dalibot.ini.template dalibot.ini
+cd ~/dalibot/staging
 ```
 
 * Edit dalibot.ini. Mandatory parameters:
@@ -79,6 +77,7 @@ telegramOutgoingWebhook = https://xxxxxx.execute-api.us-east-2.amazonaws.com/dal
 Optional parameters:
 ```
 debug = 1
+telegramBotCommand = dream
 ```
 
 Enable private messaging by listing telegram numeric ids separated by a space:

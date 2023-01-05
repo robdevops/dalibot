@@ -12,15 +12,18 @@ Telegram chat bot for [DALL·E 2](https://openai.com/dall-e-2/)
 * Optionally archive OpenAI results to local storage
 * For speed and cost benefits, OpenAI image data does not pass through the bot. Only the URL does (unless you enable archiving)
 * Runs stand-alone or serverless
+* Minimal dependencies outside the Python Standard Library. There are none if you run it serverless and only use the text prompt feature.
 
 # Requirements
-* Either a serverless environment like AWS Lambda, or a web server with a valid domain name and certificate.
 * A Telegram bot token from [BotFather](https://core.telegram.org/bots/tutorial)
 * An [OpenAI API key](https://beta.openai.com/account/api-keys)
 * Python 3.8.10+
-  * gevent (only if not running serverless)
-  * pillow (only if using the image variations feature)
-  * requests
+* For stand-alone mode:
+  * A web server with a valid domain and certificate
+  * gevent module for Python
+* If using the image variations feature:
+  * pillow module for Python
+  * requests module for Python
 
 # Usage
 * The prompt must be three or more words
