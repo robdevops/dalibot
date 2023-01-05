@@ -1,5 +1,5 @@
 # Setup - AWS Lambda
-These instructions are for AWS. The bot has not been tested under Azure/Google functions, and may require minor modification to do so.
+These instructions are for AWS. The bot has not been tested under Azure/Google functions, and may require minor modification to work in those environments.
 
 ![Screenshot of chat with Dalibot](dali_4.png?raw=true "cute watermelon smiling")
 
@@ -7,20 +7,20 @@ These instructions are for AWS. The bot has not been tested under Azure/Google f
 ## Create the Lambda function
 Go to the [Lambda console](https://us-east-2.console.aws.amazon.com/lambda/home)
 * Create a function
-  * Function name: dalibot
+  * Function name: `dalibot`
   * For _Runtime_ select the Python version that matches your system
   * For _Architecture_ select _arm64_
   * Click _Create Function_
 * You should now be in the function on the _Code_ tab. Scroll down to _Runtime settings_, and _Edit_
-  * Change _Handler_ to _bot.lambda_handler_ and _Save_
+  * Change _Handler_ to `bot.lambda_handler` and _Save_
 * Go to the _Configuration_ tab
   * Go to _General configuration_ and _Edit_
-    * Change Timeout to _1 min_ and _Save_
+    * Change Timeout to `1` min and _Save_
 
 ## Create the API Gateway
 Go to the [API Gateway console](https://us-east-2.console.aws.amazon.com/apigateway/home)
 * Create an API of type _REST API_
-  * API Name: dalibot
+  * API Name: `dalibot`
 * From the _Action_ menu, Create a method of type _POST_
   * Enter your Lambda function name and _Save_.
 * Under your method > _Integration Request_:
@@ -39,7 +39,7 @@ Go to the [API Gateway console](https://us-east-2.console.aws.amazon.com/apigate
     }
 }
 ```
-* From the _Action_ menu, choose _Deploy API_ and create a new stage. The name will form your URI.
+* From the _Action_ menu, choose _Deploy API_ and create a new stage called `dalibot`. This name forms your URI.
   * Go to _Deploy_ and take note of the _Invoke URL_ at the top of the stage editor.
 
 
@@ -52,13 +52,15 @@ sudo $(which apt dnf yum) install git
 git clone https://github.com/robdevops/dalibot.git ~/dalibot
 ```
 * Run the build script:
-cd ~/dalibot
-bash build_serverless.sh -p arm64
 ```
+cd ~/dalibot
+```
+```
+bash build_serverless.sh -p arm64
 ```
 * Complete the config:
 ```
-cd ~/dalibot/staging
+cd staging
 ```
 
 * Edit dalibot.ini. Mandatory parameters:
@@ -77,20 +79,20 @@ telegramOutgoingWebhook = https://xxxxxx.execute-api.us-east-2.amazonaws.com/dal
 
 Optional parameters:
 ```
-debug = 1
+debug = 0
 telegramBotCommand = dream
 ```
 
 Enable private messaging by listing telegram numeric ids separated by a space:
 ```
-telegramAllowedUserIDs =
+telegramAllowedUserIDs = 123456789 987654321
 ```
 
-* Create the package
+* Add your config to the package:
 ```
-zip -r script.zip .
+zip dalibot_arm64.zip dalibot.ini
 ```
-* Back in the Lambda function, go to the _Code_ tab and upload from .zip file
+* Back in the Lambda function, go to the _Code_ tab and upload from .zip file from the staging directory.
 
 ## Testing and troubleshooting
 * Message the bot, then monitor the logs from Lambda Function > _Monitor > Logs_, or from the [CloudWatch console](https://us-east-2.console.aws.amazon.com/cloudwatch/home) under _Logs_ > _Log groups_.
@@ -101,4 +103,4 @@ zip -r script.zip .
   ```
   curl -iH "Content-Type: application/json" -H "X-Telegram-Bot-Api-Secret-Token: yoursecret" -X POST -d '{"message": {"message_id": 1, "from": {"id": 1, "first_name": "test" }, "chat": {"id": 123, "type": "private"}, "text": "hello" }}' https://xxxxxx.execute-api.us-east-2.amazonaws.com/dalibot
   ```
-* If variations don't work and the log shows 'ImportError: cannot import name '_imaging' from 'PIL', make sure you select the right Python version under  _Function > Code > Runtime settings_.
+* If variations don't work and the log shows `ImportError: cannot import name '_imaging' from 'PIL'`, make sure the Python version under  _Function > Code > Runtime settings_ matches your build environment.
