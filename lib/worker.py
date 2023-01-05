@@ -1,10 +1,10 @@
 #!/usr/bin/python3
 
 import io
-import requests
 import time
 from sys import stderr
 import threading
+import urllib.request, socket
 
 from lib.config import *
 import lib.telegram as telegram
@@ -20,12 +20,16 @@ def process_request(service, chat_id, user, message, botName, userRealName, chat
                 message = 'Variation of ' + message
             print("Downloading from telegram")
             image_url = telegram.getFileURL(file_id)
+            if not image_url:
+                message = "error fetching image from Telegram"
+                error_to_telegram(chat_id, message, message_id)
+                return
             success, cropped, image_data = prepare_image(image_url)
             if not success:
                 message = image_data
                 error_to_telegram(chat_id, message, message_id)
                 return
-            print("Sending image to OpenAI")
+            print("Uploading image to OpenAI")
             if debug:
                 size='256x256'
             else:
@@ -75,12 +79,15 @@ def process_request(service, chat_id, user, message, botName, userRealName, chat
     return
 
 def download_file(image_url):
-    r = requests.get(image_url, timeout=config_http_timeout)
-    if r.status_code == 200:
-        print(r.status_code, "downloaded file for archiving")
-        image_data = io.BytesIO(r.content)
+    try:
+        r = urllib.request.urlopen(image_url, timeout=config_http_timeout)
+    except Exception as e:
+        print(str(e), file=stderr)
+    if r.code == 200:
+        print(r.code, "downloaded file for archiving")
+        image_data = io.BytesIO(r.read())
     else:
-        print(r.status_code, "while downloading file for archiving")
+        print(r.code, "while downloading file for archiving")
     return image_data
 
 def bytesio_to_file(image_bytesio, filename):
@@ -88,7 +95,7 @@ def bytesio_to_file(image_bytesio, filename):
         with open(filename, "wb") as f:
             f.write(image_bytesio.getbuffer())
     except Exception as e:
-        print(e, file=stderr)
+        print(str(e), file=stderr)
     else:
         print("Saved", filename)
     return
@@ -98,11 +105,11 @@ def prepare_image(image_url):
         from PIL import Image
     except ModuleNotFoundError:
         message = "This feature requires the pillow library to be installed"
-        print("message", file=stderr)
+        print(message, file=stderr)
         return False, False, message
     print("Opening image")
     try:
-        im = Image.open(requests.get(image_url, stream=True, timeout=config_http_timeout).raw)
+        im = Image.open(urllib.request.urlopen(image_url, timeout=config_http_timeout))
     except Exception as e:
         message = "Error opening image: " + str(e)
         print(message, file=stderr)
@@ -132,6 +139,7 @@ def prepare_image(image_url):
         new_width = new_height = im.size[0] / size_deviation**0.55
         # resize from original to preserve quality
         # im = im_backup.resize((int(new_width), int(new_height)))
+        # resize successively to increase speed
         im = im.resize((int(new_width), int(new_height)))
         with io.BytesIO() as byte_stream:
             im.save(byte_stream, format='PNG')

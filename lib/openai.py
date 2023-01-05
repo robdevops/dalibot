@@ -1,22 +1,31 @@
-import requests
+import urllib.request, socket, json
 from lib.config import *
 from sys import stderr
-import json
 from urllib.parse import unquote
 
 def imagesGenerations(prompt, size='256x256', number=1):
     url = 'https://api.openai.com/v1/images/generations'
-    headers = {'Content-type': 'application/json', 'Authorization': 'Bearer ' + config_openai_api_key}
-    payload = {'prompt': prompt, 'size': size, 'n': number, 'response_format': 'url'}
+    data = {'prompt': prompt, 'size': size, 'n': number, 'response_format': 'url'}
+    data = json.dumps(data).encode()
+    req = urllib.request.Request(url, data=data, method='POST')
+    req.add_header('Content-Type', 'application/json')
+    req.add_header('Authorization', 'Bearer ' + config_openai_api_key)
     try:
-        r = requests.post(url, headers=headers, json=payload, timeout=20)
-    except requests.exceptions.ConnectionError as e:
-        print("OpenAI:", e, file=stderr)
-        return False, e
-    success, message = processOpenaiUrl(r.json(), r.status_code)
+        r = urllib.request.urlopen(req, timeout=20)
+    except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
+        error = "OpenAI error: " + str(e)
+        print(error, file=stderr)
+        return False, error
+    success, message = processOpenaiUrl(json.load(r), r.code)
     return success, message
 
 def imagesVariations(imagebytes, size='256x256', number=4):
+    try:
+        import requests
+    except ModuleNotFoundError:
+        error = "This feature requires the requests library to be installed"
+        print(error, file=stderr)
+        return False, error
     url = 'https://api.openai.com/v1/images/variations'
     headers = {'Authorization': 'Bearer ' + config_openai_api_key }
     files = {"image": imagebytes}
@@ -24,8 +33,9 @@ def imagesVariations(imagebytes, size='256x256', number=4):
     try:
         r = requests.post(url, headers=headers, data=data, files=files, timeout=20)
     except requests.exceptions.ConnectionError as e:
-        print("OpenAI:", e, file=stderr)
-        return False, e
+        error = "OpenAI upload error: " + str(e)
+        print(error, file=stderr)
+        return False, error
     success, message = processOpenaiUrl(r.json(), r.status_code)
     return success, message
 
