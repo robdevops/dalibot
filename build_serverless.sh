@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ME=${0##*/}
-MYDIR=${0%/*}
+MYDIR=$(dirname $0)
 
 parse_args() {
 	while getopts ":h:p:" opt; do
@@ -35,13 +35,13 @@ parse_args $@
 mkdir -p ${MYDIR}/staging
 cd ${MYDIR}/staging
 rm -vrf Pillow*
-pip3 install --platform $pip_platform --only-binary=:all: requests pillow --upgrade --target=$(pwd)
+pip3 install --platform $pip_platform --only-binary=:all: requests pillow --upgrade --target=${MYDIR}/staging
 
 [[ -s bot.py ]] || ln -vs ../bot.py bot.py
 [[ -s lib ]] || ln -vs ../lib lib
 
 if [[ dalibot.ini ]]; then
-    zip -r dalibot_${PLATFORM}.zip .
+    zip -r dalibot_${PLATFORM}.zip . && echo -e "\n$(realpath dalibot_${PLATFORM}.zip) created."
 else
     if ! [[ -f dalibot.ini ]] && ! [[ ../dalibot.ini ]]; then
         cp -v ../dalibot.ini.example dalibot.ini
@@ -50,9 +50,8 @@ else
     fi
 fi
 
-echo
-echo "If you still need to edit dalibot.ini, do so and then update the package:"
-echo "cd staging"
+echo "If you still need to edit the config, do so and then update the package:"
+echo "cd $(realpath ${MYDIR}/staging)"
 echo "Edit dalibot.ini"
 echo "zip dalibot_${PLATFORM}.zip dalibot.ini"
-echo "See doc/serverless.md for help"
+echo "See $(realpath ${MYDIR}/doc/serverless.md) for help"
