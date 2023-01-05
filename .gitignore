@@ -136,3 +136,4 @@ var/cache/*
 .env
 *.conf
 *.ini
+staging
