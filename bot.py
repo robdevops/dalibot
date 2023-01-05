@@ -1,16 +1,18 @@
 #!/usr/bin/python3
 
 import os
-if os.environ.get("AWS_LAMBDA_FUNCTION_NAME") is None:
-    print("we are running standalone!")
+if os.environ.get("AWS_LAMBDA_FUNCTION_NAME") is None and 'GCF_BLOCK_RUNTIME' not in os.environ:
+    print("We are running standalone!")
     import gevent.monkey
     gevent.monkey.patch_all()
     from gevent import pywsgi
+elif 'CNB_STACK_ID' in os.environ and 'google' in os.environ.get("CNB_STACK_ID"):
+    print("We are running as a Google Cloud Function!")
 else:
-    print("we are running on Lambda!")
+    print("We are running as a Lambda Function!")
 
-import json, re
-import threading
+import json
+import re
 from sys import stderr
 from urllib.parse import urlparse
 
@@ -20,14 +22,34 @@ if config_telegramBotToken:
     import lib.telegram as telegram
     botName = telegram.botName
 
-def lambda_handler(event, context):
-    if debug:
-        print(json.dumps(event, indent=4))
+import threading
+#import multiprocessing
 
+def lambda_handler(event, context):
     response = main(event)
     if response:
         return response
-    else: return ''
+    else:
+        return ''
+
+def google_function_handler(request):
+    import functions_framework
+    import json
+    response = hello_http(request)
+    @functions_framework.http
+    def hello_http(request):
+        headers = {}
+        for k, v in sorted(request.headers.items()):
+            headers[k] = v
+        uri = request.path
+        body = request.get_json(silent=True)
+        args = request.args
+        event = { 'headers': headers, 'uri': uri, 'body': body, 'args': args}
+        response = main(event)
+    if response:
+        return response
+    else:
+        return ''
 
 def wsgi_handler(environ, start_response):
     headers = {}
@@ -38,9 +60,7 @@ def wsgi_handler(environ, start_response):
                 headers[header] = h[1]
             else:
                 headers[h[0]] = h[1]
-
     uri = environ['PATH_INFO']
-
     if 'CONTENT_TYPE' in environ and environ['CONTENT_TYPE'] == 'application/json':
         body = json.loads(environ['wsgi.input'].read())
     else:
@@ -50,10 +70,6 @@ def wsgi_handler(environ, start_response):
         return b['']
 
     event = { 'headers': headers, 'uri': uri, 'body': body }
-
-    if debug:
-        print(json.dumps(event, indent=4))
-
     status = '200 OK'
     headers = [('Content-type', 'application/json')]
     start_response(status, headers)
@@ -65,6 +81,8 @@ def wsgi_handler(environ, start_response):
         return [b'']
 
 def main(event):
+    if debug:
+        print(json.dumps(event, indent=4))
     inbound = event['body']
     uri = event['uri']
     # triage request - the Great Big If
@@ -111,7 +129,7 @@ def main(event):
                     message = inbound["message"]["caption"]
                 photo = inbound["message"]["photo"][-1]
                 file_id = photo["file_id"]
-                print(f"[Telegram photo]:", user, file_id, message)
+                print(f"[Telegram photo]:", user, message)
                 # under this condition we launch a worker thread
             elif "document" in inbound["message"]:
                 mime_type = inbound["message"]["document"]["mime_type"]
@@ -122,7 +140,7 @@ def main(event):
                 if "caption" in inbound["message"]:
                     message = inbound["message"]["caption"]
                 file_id = inbound["message"]["document"]["file_id"]
-                print(f"[Telegram document]:", user, file_id, mime_type, message)
+                print(f"[Telegram document]:", user, mime_type, message)
                 # under this condition we launch a worker thread
             else:
                 print(f"[{service}]: unhandled message without text/photo/document")
@@ -169,6 +187,10 @@ def main(event):
     # process in a background thread so we don't keep the requesting client waiting
     t = threading.Thread(target=runWorker)
     t.start()
+
+    #p = multiprocessing.Process(target=worker.process_request, args=(service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id))
+    #p.start()
+
     if os.environ.get("AWS_LAMBDA_FUNCTION_NAME") is not None:
         """
         lambda freezes the environment before the worker completes unless we wait here.
@@ -183,6 +205,7 @@ def main(event):
     return
 
 if __name__ == '__main__':
+    #multiprocessing.set_start_method('spawn')
     if os.getuid() == 0:
         print("Running as superuser. This is not recommended.", file=stderr)
     httpd = pywsgi.WSGIServer((config_ip, config_port), wsgi_handler)
