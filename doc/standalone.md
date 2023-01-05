@@ -61,7 +61,7 @@ telegramOutgoingWebhook = https://www.example.com/dalibot
 
 Optional parameters:
 ```
-debug = 1
+debug = 0
 telegramBotCommand = dream
 ```
 
@@ -73,7 +73,7 @@ archive_dir = var/cache
 
 Enable private messaging by listing telegram numeric ids separated by a space:
 ```
-telegramAllowedUserIDs =
+telegramAllowedUserIDs = 123456789 987654321
 ```
 
 Override listen parameters:
@@ -95,7 +95,7 @@ sudo cp -v ~/dalibot/etc/systemd/system/dalibot.service /etc/systemd/system/
 
 Edit the file to set your path and user to run as:
 ```
-sudo sed -i 's/CHANGEME/your username/' /etc/systemd/system/dalibot.service
+sudo sed -i "s/CHANGEME/${USER}/" /etc/systemd/system/dalibot.service
 ```
 
 Reload systemd:
