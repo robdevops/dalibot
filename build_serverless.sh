@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+ME=${0##*/}
+MYDIR=${0%/*}
+
 parse_args() {
 	while getopts ":h:p:" opt; do
         PLATFORM=""
@@ -23,28 +26,33 @@ fi
 
 
 usage() {
-	echo "Usage: ${0##*/} -p <arm64|x86_64>"
+	echo "Usage: $ME -p <arm64|x86_64>"
 	exit 3
 }
 
 
 parse_args $@
-mkdir -p staging
-cd staging
+mkdir -p ${MYDIR}/staging
+cd ${MYDIR}/staging
 rm -vrf Pillow*
 pip3 install --platform $pip_platform --only-binary=:all: requests pillow --upgrade --target=$(pwd)
 
 [[ -s bot.py ]] || ln -vs ../bot.py bot.py
 [[ -s lib ]] || ln -vs ../lib lib
-if ! [[ -f dalibot.ini ]] && ! [[ ../dalibot.ini ]]; then
-    cp -v ../dalibot.ini.example dalibot.ini
-elif ! [[ -f dalibot.ini ]] && [[ -f ../dalibot.ini ]]; then
-    cp -v ../dalibot.ini dalibot.ini
+
+if [[ dalibot.ini ]]; then
+    zip -r dalibot_${PLATFORM}.zip .
+else
+    if ! [[ -f dalibot.ini ]] && ! [[ ../dalibot.ini ]]; then
+        cp -v ../dalibot.ini.example dalibot.ini
+    elif ! [[ -f dalibot.ini ]] && [[ -f ../dalibot.ini ]]; then
+        cp -v ../dalibot.ini dalibot.ini
+    fi
 fi
 
 echo
-echo "Complete the setup with:"
+echo "If you still need to edit dalibot.ini, do so and then update the package:"
 echo "cd staging"
-echo "edit dalibot.ini"
-echo "zip -r dalibot_${PLATFORM}.zip ."
-echo "see doc/serverless.md for help"
+echo "Edit dalibot.ini"
+echo "zip dalibot_${PLATFORM}.zip dalibot.ini"
+echo "See doc/serverless.md for help"
