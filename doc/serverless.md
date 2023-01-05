@@ -1,5 +1,5 @@
 # Setup - AWS Lambda
-The bot should also work as an Azure Function or a Google Cloud Function, but it has not been tested, and the setup procedure will vary, although principles remain the same.
+These instructions are for AWS. The bot has not been tested under Azure/Google functions, and may require minor modification to do so.
 
 ![Screenshot of chat with Dalibot](dali_4.png?raw=true "cute watermelon smiling")
 
@@ -8,9 +8,10 @@ The bot should also work as an Azure Function or a Google Cloud Function, but it
 Go to the [Lambda console](https://us-east-2.console.aws.amazon.com/lambda/home)
 * Create a function
   * Function name: dalibot
-  * In the _Runtime_ drop down menu, select the latest Python
+  * For _Runtime_ select the Python version that matches your system
+  * For _Architecture_ select _arm64_
   * Click _Create Function_
-* Scroll down to _Runtime settings_ and _Edit_
+* You should now be in the function on the _Code_ tab. Scroll down to _Runtime settings_, and _Edit_
   * Change _Handler_ to _bot.lambda_handler_ and _Save_
 * Go to the _Configuration_ tab
   * Go to _General configuration_ and _Edit_
@@ -52,7 +53,7 @@ git clone https://github.com/robdevops/dalibot.git ~/dalibot
 ```
 * Run the build script:
 cd ~/dalibot
-bash build_serverless.sh
+bash build_serverless.sh -p arm64
 ```
 ```
 * Complete the config:
@@ -100,3 +101,4 @@ zip -r script.zip .
   ```
   curl -iH "Content-Type: application/json" -H "X-Telegram-Bot-Api-Secret-Token: yoursecret" -X POST -d '{"message": {"message_id": 1, "from": {"id": 1, "first_name": "test" }, "chat": {"id": 123, "type": "private"}, "text": "hello" }}' https://xxxxxx.execute-api.us-east-2.amazonaws.com/dalibot
   ```
+* If variations don't work and the log shows 'ImportError: cannot import name '_imaging' from 'PIL', make sure you select the right Python version under  _Function > Code > Runtime settings_.

@@ -16,7 +16,7 @@ def setWebhook():
     try:
         r = urllib.request.urlopen(req, timeout=config_http_timeout)
     except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
-        print("Failure executing request:", url, headers, data, str(e))
+        print("Failure executing request:", url, headers.decode(), data, str(e))
         return False
     print("Registering Telegram webhook:", r.read().decode(), file=stderr)
 
@@ -67,7 +67,6 @@ def sendMediaGroup(chat_id, url_list, caption, message_id=None):
         else:
             media.append({'type': 'photo', 'media': openai_url})
     url = webhooks['telegram'] + "sendMediaGroup?chat_id=" + str(chat_id)
-    headers = {'Content-type': 'application/json'}
     data = {
     'disable_notification': 'true',
     'chat_id': chat_id,
@@ -76,7 +75,8 @@ def sendMediaGroup(chat_id, url_list, caption, message_id=None):
     "reply_to_message_id": message_id
     }
     data = json.dumps(data).encode('utf-8')
-    req = urllib.request.Request(url, data, headers, method='POST')
+    req = urllib.request.Request(url, data, method='POST')
+    req.add_header('Content-type', 'application/json')
     try:
         r = urllib.request.urlopen(req, timeout=config_http_timeout)
     except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
@@ -105,7 +105,6 @@ def getFileURL(file_id):
     data = json.load(r)
     file_path = data['result']['file_path']
     file_url = 'https://api.telegram.org/file/bot' + config_telegramBotToken + '/' + file_path
-    print(file_id, file_path, file_url)
     return(file_url)
 
 def sendMessage(chat_id, message, message_id=None):

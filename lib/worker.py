@@ -32,14 +32,19 @@ def process_request(service, chat_id, user, message, botName, userRealName, chat
             print("Uploading image to OpenAI")
             if debug:
                 size='256x256'
+                variations=2
             else:
                 size='1024x1024'
-            success, image_url = openai.imagesVariations(image_data, size, 4)
+                variations=4
+            success, image_url = openai.imagesVariations(image_data, size, variations)
             if success:
                 print("Sending result to Telegram")
                 if cropped:
                     message = message + "\nNote: I centre-cropped your non-square image before sending it to OpenAI"
-                telegram.sendMediaGroup(chat_id, image_url, message)
+                if isinstance(image_url, list):
+                    telegram.sendMediaGroup(chat_id, image_url, message)
+                else:
+                    telegram.sendPhoto(chat_id, image_url, message)
                 if config_archive:
                     if isinstance(image_url, list):
                         for idx, url in enumerate(image_url):
@@ -105,6 +110,10 @@ def prepare_image(image_url):
         from PIL import Image
     except ModuleNotFoundError:
         message = "This feature requires the pillow library to be installed"
+        print(message, file=stderr)
+        return False, False, message
+    except ImportError as e:
+        message = "Pillow import error: " + str(e) + " check Python version matches the build environment"
         print(message, file=stderr)
         return False, False, message
     print("Opening image")
