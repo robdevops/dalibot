@@ -41,7 +41,7 @@ telegramOutgoingWebhook = https://www.example.com/dalibot
 ```
 
 ### Optional parameters
-You can stderr more verbose:
+You can make stderr more verbose:
 ```
 debug = 0
 ```
