@@ -27,7 +27,7 @@ Go to the [API Gateway console](https://us-east-2.console.aws.amazon.com/apigate
 * From the _Action_ menu, Create a method of type _POST_
   * **Lambda function:** `dalibot`
   * Hit _Save_.
-* Under your method > _Integration Request_:
+* Under your POST method > _Integration Request_:
   * Expand _HTTP Headers_ and add a header named `X-Amz-Invocation-Type` mapped from `'Event'` (with quotes). This tells Lambda to process incoming requests asyncronously, preventing duplicate notifications from Telegram.
   * Expand _Mapping Templates_ and add a mapping template for Content-Type `application/json`. Scroll down and enter the following mappings and _Save_. This allows the bot to route the request appropriately, and read Telegram's auth header:
 ```
