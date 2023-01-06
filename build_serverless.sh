@@ -3,7 +3,9 @@ set -euo pipefail
 
 ME=${0##*/}
 MYDIR=$(realpath $(dirname $0))
-PYTHON_VERSION=$(python3 -c 'import sys; version=sys.version_info[:2]; print("{0}.{1}".format(*version))')
+for i in python python{1..9}; do which $i >/dev/null && pybin=$i ;done
+PYTHON_VERSION=$($pybin -V | cut -d' ' -f2)
+PYTHON_VERSION=${PYTHON_VERSION%.*}
 
 parse_args() {
 	while getopts ":h:p:" opt; do
