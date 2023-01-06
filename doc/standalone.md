@@ -38,9 +38,9 @@ server {
     }
 }
 ```
-If you wish to have the above telegram ACL dynamically update, you can uncomment the `include` line, and run `sudo etc/cron.daily/nginx_telegram_cron` once, or install it as a cron job with `sudo cp -v etc/cron.daily/nginx_telegram_cron /etc/cron.daily/`
+If you wish to have the above telegram ACL dynamically update, uncomment the `include` line, and install the cron job with `sudo cp -v etc/cron.daily/nginx_telegram_cron /etc/cron.daily/` and run it with `sudo /etc/cron.daily/nginx_telegram_cron`
 
-* Copy the example config
+* Copy the example dalibot config:
 ```
 cp dalibot.ini.template dalibot.ini
 ```
