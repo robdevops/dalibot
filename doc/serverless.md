@@ -7,24 +7,28 @@ These instructions are for AWS. The bot has not been tested under Azure/Google f
 ## Create the Lambda function
 Go to the [Lambda console](https://us-east-2.console.aws.amazon.com/lambda/home)
 * Create a function
-  * Function name: `dalibot`
-  * For _Runtime_ select the Python version that matches your system
-  * For _Architecture_ select _arm64_
-  * Click _Create Function_
+  * **Function name:** `dalibot`
+  * **Runtime:** the Python version that matches your build environment
+  * **Architecture:** arm64
+  * Hit _Create Function_
 * You should now be in the function on the _Code_ tab. Scroll down to _Runtime settings_, and _Edit_
-  * Change _Handler_ to `bot.lambda_handler` and _Save_
+  * **Handler:** `bot.lambda_handler`
+  * Hit _Save_
 * Go to the _Configuration_ tab
   * Go to _General configuration_ and _Edit_
-    * Change Timeout to `1` min and _Save_
+    * **Timeout:** `1` min
+    * Hit _Save_
 
 ## Create the API Gateway
 Go to the [API Gateway console](https://us-east-2.console.aws.amazon.com/apigateway/home)
-* Create an API of type _REST API_
-  * API Name: `dalibot`
+* Build an API of type _REST API_
+  * **API Name:** `dalibot`
+  * Hit _Create API_
 * From the _Action_ menu, Create a method of type _POST_
-  * Enter your Lambda function name and _Save_.
+  * **Lambda function:** `dalibot`
+  * Hit _Save_.
 * Under your method > _Integration Request_:
-  * Expand _HTTP Headers_. Add a header named `X-Amz-Invocation-Type` mapped from `'Event'` (with quotes). This tells Lambda to process incoming requests asyncronously, preventing duplicate notifications from Telegram.
+  * Expand _HTTP Headers_ and add a header named `X-Amz-Invocation-Type` mapped from `'Event'` (with quotes). This tells Lambda to process incoming requests asyncronously, preventing duplicate notifications from Telegram.
   * Expand _Mapping Templates_ and add a mapping template for Content-Type `application/json`. Scroll down and enter the following mappings and _Save_. This allows the bot to route the request appropriately, and read Telegram's auth header:
 ```
 {
@@ -39,8 +43,11 @@ Go to the [API Gateway console](https://us-east-2.console.aws.amazon.com/apigate
     }
 }
 ```
-* From the _Action_ menu, choose _Deploy API_ and create a new stage called `dalibot`. This name forms your URI.
-  * Go to _Deploy_ and take note of the _Invoke URL_ at the top of the stage editor.
+* From the _Action_ menu, hit _Deploy API_
+  * **Deployment stage:** `[New Stage]` 
+  * **Stage name:** `dalibot` (this name forms your URI)
+  * Hit _Deploy_
+  * Take note of the _Invoke URL_ at the top of the stage editor
 
 
 ## Prepare the Lambda package
@@ -94,9 +101,9 @@ zip dalibot_arm64.zip dalibot.ini
 ```
 * Back in the Lambda function, go to the _Code_ tab and upload from .zip file from the staging directory.
 
-## Testing and troubleshooting
+# Testing and troubleshooting
 * Message the bot, then monitor the logs from Lambda Function > _Monitor > Logs_, or from the [CloudWatch console](https://us-east-2.console.aws.amazon.com/cloudwatch/home) under _Logs_ > _Log groups_.
-* The function can also be triggered in various ways, but these will not be end-to-end tests:
+* The function can also be triggered in various ways, but these will fail at various points because they won't receive the Telegram json payload:
   * From the _Test_ tab in the Lambda function
   * From the POST - Method execution in API Gateway console.
   * With curl, for example:
