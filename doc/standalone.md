@@ -47,7 +47,7 @@ debug = 0
 ```
 
 You can customise the bot command:
-``
+```
 telegramBotCommand = dream
 ```
 
