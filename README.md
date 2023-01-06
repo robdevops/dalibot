@@ -20,15 +20,15 @@ Telegram chat bot for [DALL·E 2](https://openai.com/dall-e-2/)
 * The bot only responds in group chats, unless you set `telegramAllowedUserIDs` in dalibot.ini
 
 # Requirements
-* A Telegram bot token from [BotFather](https://core.telegram.org/bots/tutorial)
+* A Telegram bot token from [BotFather](https://t.me/botfather)
 * An [OpenAI API key](https://beta.openai.com/account/api-keys)
 * Python 3.8.10+
 * For stand-alone mode:
   * A web server with a valid domain and certificate
-  * gevent module for Python
+  * Python gevent module
 * If using the image variations feature:
-  * pillow module for Python
-  * requests module for Python
+  * Python pillow module
+  * Python requests module
 
 # Setup
 * If managing your own web server, see [WSGI setup](doc/standalone.md)
