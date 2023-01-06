@@ -92,12 +92,18 @@ telegramOutgoingWebhook = https://xxxxxx.execute-api.us-east-2.amazonaws.com/dal
 ```
 
 #### Optional parameters
+
+You can make stderr more verbose:
 ```
-debug = 0
+debug = 1
+```
+
+You can customise the bot command:
+```
 telegramBotCommand = dream
 ```
 
-Enable private messaging by listing telegram numeric ids separated by a space:
+You can enable private messaging by listing telegram numeric ids separated by a space:
 ```
 telegramAllowedUserIDs = 123456789 987654321
 ```
