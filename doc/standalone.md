@@ -2,14 +2,14 @@
 
 ![Screenshot of chat with Dalibot](dali_2.png?raw=true "an impressionist oil painting of sunflowers in a purple vase")
 
-* Clone the git repo
+* Clone the git repo:
 ```
 sudo $(which apt dnf yum) install git
 ```
 ```
 git clone https://github.com/robdevops/dalibot.git ~/dalibot
 ```
-* Install the Python modules
+* Install the Python modules:
 ```
 cd ~/dalibot
 ```
@@ -107,7 +107,7 @@ Enable and start the bot:
 ```
 sudo systemctl enable dalibot --now
 ```
-You can now monitor the bot's stderr with :
+You can now monitor the bot's stderr with:
 ```
 journalctl -fu dalibot
 ```
