@@ -40,7 +40,7 @@ pip3 install --platform $pip_platform --only-binary=:all: requests pillow --upgr
 [[ -s bot.py ]] || ln -vs ../bot.py bot.py
 [[ -s lib ]] || ln -vs ../lib lib
 
-if [[ dalibot.ini ]]; then
+if [[ -f dalibot.ini ]]; then
     zip -r dalibot_${PLATFORM}.zip . && echo -e "\ndalibot_${PLATFORM}.zip created."
 else
     if ! [[ -f dalibot.ini ]] && ! [[ ../dalibot.ini ]]; then
