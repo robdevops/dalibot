@@ -51,26 +51,33 @@ Go to the [API Gateway console](https://us-east-2.console.aws.amazon.com/apigate
 
 
 ## Prepare the Lambda package
-* Clone the git repo:
+
+### Clone the git repo
 ```
 sudo $(which apt dnf yum) install git
 ```
 ```
 git clone https://github.com/robdevops/dalibot.git ~/dalibot
 ```
-* Run the build script:
+
+### Run the build script
 ```
 cd ~/dalibot
 ```
 ```
 bash build_serverless.sh -p arm64
 ```
-* Complete the config:
+
+### Complete the config
 ```
 cd staging
 ```
 
-* Edit dalibot.ini. Mandatory parameters:
+```
+Edit dalibot.ini
+```
+
+#### Mandatory parameters
   * Set `openai_api_key` to the [key from OpenAI](https://beta.openai.com/account/api-keys)
   * Set `telegramOutgoingToken` to a [secret token of your choice](https://core.telegram.org/bots/api#setwebhook)
   * Set `telegramOutgoingWebhook` to your API gateway stage Invoke URL from previous section
@@ -84,7 +91,7 @@ telegramOutgoingToken = sLnHdQmYoohmysecret7PX5VDM4cPW
 telegramOutgoingWebhook = https://xxxxxx.execute-api.us-east-2.amazonaws.com/dalibot
 ```
 
-Optional parameters:
+#### Optional parameters
 ```
 debug = 0
 telegramBotCommand = dream
@@ -95,11 +102,14 @@ Enable private messaging by listing telegram numeric ids separated by a space:
 telegramAllowedUserIDs = 123456789 987654321
 ```
 
-* Add your config to the package:
+### Add your config to the package
 ```
 zip dalibot_arm64.zip dalibot.ini
 ```
-* Back in the Lambda function, go to the _Code_ tab and upload from .zip file from the staging directory.
+
+### Upload the package
+Back in the Lambda function, go to the _Code_ tab and then _upload from .zip file_ from the staging directory.
+
 
 # Testing and troubleshooting
 * Message the bot, then monitor the logs from Lambda Function > _Monitor > Logs_, or from the [CloudWatch console](https://us-east-2.console.aws.amazon.com/cloudwatch/home) under _Logs_ > _Log groups_.
