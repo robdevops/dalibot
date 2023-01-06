@@ -44,7 +44,7 @@ Go to the [API Gateway console](https://us-east-2.console.aws.amazon.com/apigate
 
 
 ## Prepare the Lambda package
-* Clone the git repo
+* Clone the git repo:
 ```
 sudo $(which apt dnf yum) install git
 ```
