@@ -43,10 +43,10 @@ pip3 install --platform $pip_platform --only-binary=:all: requests pillow --upgr
 if [[ -f dalibot.ini ]]; then
     zip -r dalibot_${PLATFORM}.zip . && echo -e "\ndalibot_${PLATFORM}.zip created."
 else
-    if ! [[ -f dalibot.ini ]] && ! [[ ../dalibot.ini ]]; then
-        cp -v ../dalibot.ini.example dalibot.ini
-    elif ! [[ -f dalibot.ini ]] && [[ -f ../dalibot.ini ]]; then
+    if [[ -f ../dalibot.ini ]]; then
         cp -v ../dalibot.ini dalibot.ini
+    else
+        cp -v ../dalibot.ini.example dalibot.ini
     fi
 fi
 
