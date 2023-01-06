@@ -103,7 +103,7 @@ zip dalibot_arm64.zip dalibot.ini
 
 # Testing and troubleshooting
 * Message the bot, then monitor the logs from Lambda Function > _Monitor > Logs_, or from the [CloudWatch console](https://us-east-2.console.aws.amazon.com/cloudwatch/home) under _Logs_ > _Log groups_.
-* The function can also be triggered in various ways, but these will not be end-to-end tests:
+* The function can also be triggered in various ways, but these will fail at various points because they won't receive the Telegram json payload:
   * From the _Test_ tab in the Lambda function
   * From the POST - Method execution in API Gateway console.
   * With curl, for example:
