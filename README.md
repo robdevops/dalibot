@@ -35,16 +35,19 @@ Telegram chat bot for [DALL·E 2](https://openai.com/dall-e-2/)
 * If running serverless, see [cloud function setup](doc/serverless.md)
 
 # Security
-* Protect your API keys and bot tokens:
+## Protect your API keys and bot tokens
 ```
 chmod 600 dalibot.ini
 ```
+
+## Preventing Unauthorized use of your bot
 * Because Telegram bots are discoverable by anyone, the bot ignores private messages by default. You can whitelist users in dalibot.ini. User IDs can be obtained from the URL bar when messaging a user on https://web.telegram.org/, or from the bots console output when someone messages it. Example config:
 ```
 telegramAllowedUserIDs = 123456789 987654321
 ```
-* To prevent unauthorized use, it is recommended to message `/setjoingroups` to BotFather and set it to `Disabled` after you have added your bot to any desired groups.
+* It is recommended to message `/setjoingroups` to BotFather to set your bot group join to `Disabled` after you have added your bot to any desired groups.
+## Secure your endpoint
 * Only allow connections from Telegram's subnets as per the [example Nginx config](doc/standalone.md).
-* Set `telegramOutgoingToken` to a strong value to prevent another bot being used to access your URL.
+* Set `telegramOutgoingToken` to a strong value.
 
 ![Screenshot of chat with Dalibot](doc/dali_5.png?raw=true "a painting of a fox sitting in a field at sunrise in the style of Claude Monet")
