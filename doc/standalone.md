@@ -2,6 +2,7 @@
 
 ![Screenshot of chat with Dalibot](dali_2.png?raw=true "an impressionist oil painting of sunflowers in a purple vase")
 
+
 ## Clone the git repo
 ```
 sudo $(which apt dnf yum) install git
@@ -94,7 +95,18 @@ server {
 ```
 
 ## ACLs
-If you wish to have the above telegram ACL dynamically update, uncomment the `include` line, and install the cron job with `sudo cp -v etc/cron.daily/nginx_telegram_cron /etc/cron.daily/` and run it with `sudo /etc/cron.daily/nginx_telegram_cron`
+If you wish to have the above telegram ACL dynamically update:
+* Uncomment the `include` line
+
+* Install the cron job:
+```
+sudo cp -v etc/cron.daily/nginx_telegram_cron /etc/cron.daily/
+```
+
+* Run the cron to generate the initial ACL file:
+```
+sudo /etc/cron.daily/nginx_telegram_cron
+```
 
 
 # Daemonize
