@@ -43,7 +43,7 @@ telegramOutgoingWebhook = https://www.example.com/dalibot
 ### Optional parameters
 You can make stderr more verbose:
 ```
-debug = 0
+debug = 1
 ```
 
 You can customise the bot command:
