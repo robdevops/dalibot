@@ -8,8 +8,8 @@ These instructions are for AWS. The bot has not been tested under Azure/Google f
 Go to the [Lambda console](https://us-east-2.console.aws.amazon.com/lambda/home)
 * Create a function
   * **Function name:** `dalibot`
-  * **Runtime:** select the Python version that matches your system
-  * **Architecture:** select _arm64_
+  * **Runtime:** the Python version that matches your build environment
+  * **Architecture:** arm64
   * Hit _Create Function_
 * You should now be in the function on the _Code_ tab. Scroll down to _Runtime settings_, and _Edit_
   * **Handler:** `bot.lambda_handler`
