@@ -101,7 +101,7 @@ zip dalibot_arm64.zip dalibot.ini
 ```
 * Back in the Lambda function, go to the _Code_ tab and upload from .zip file from the staging directory.
 
-## Testing and troubleshooting
+# Testing and troubleshooting
 * Message the bot, then monitor the logs from Lambda Function > _Monitor > Logs_, or from the [CloudWatch console](https://us-east-2.console.aws.amazon.com/cloudwatch/home) under _Logs_ > _Log groups_.
 * The function can also be triggered in various ways, but these will not be end-to-end tests:
   * From the _Test_ tab in the Lambda function
