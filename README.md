@@ -14,6 +14,11 @@ Telegram chat bot for [DALL·E 2](https://openai.com/dall-e-2/)
 * Runs stand-alone or serverless
 * Minimal dependencies outside the Python Standard Library. There are none if you run it serverless and only use the text prompt feature.
 
+# Usage
+* The prompt must be three or more words
+* The prompt must begin with `/dream`. Alternatively, @mention the bot if it has admin access in the group.
+* The bot only responds in group chats, unless you set `telegramAllowedUserIDs` in dalibot.ini
+
 # Requirements
 * A Telegram bot token from [BotFather](https://core.telegram.org/bots/tutorial)
 * An [OpenAI API key](https://beta.openai.com/account/api-keys)
@@ -24,11 +29,6 @@ Telegram chat bot for [DALL·E 2](https://openai.com/dall-e-2/)
 * If using the image variations feature:
   * pillow module for Python
   * requests module for Python
-
-# Usage
-* The prompt must be three or more words
-* The prompt must begin with `/dream`. Alternatively, @mention the bot if it has admin access in the group.
-* The bot only responds in group chats, unless you set `telegramAllowedUserIDs` in dalibot.ini
 
 # Setup
 * If managing your own web server, see [WSGI setup](doc/standalone.md)
