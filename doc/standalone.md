@@ -41,23 +41,28 @@ telegramOutgoingWebhook = https://www.example.com/dalibot
 ```
 
 ### Optional parameters
+You can stderr more verbose:
 ```
 debug = 0
+```
+
+You can customise the bot command:
+``
 telegramBotCommand = dream
 ```
 
-Enable archiving to download OpenAI images to disk (defaults to `dalibot/var/cache`). Note: user uploads for variations are never saved.
+You can enable downloading of OpenAI images to disk (defaults to `dalibot/var/cache`). Note: user uploads for variations are never saved.
 ```
 archive = 1
 archive_dir = var/cache
 ```
 
-Enable private messaging by listing telegram numeric ids separated by a space:
+You can enable private messaging by listing telegram numeric ids separated by a space:
 ```
 telegramAllowedUserIDs = 123456789 987654321
 ```
 
-Override listen parameters:
+You can override the listen parameters:
 ```
 ip = 127.0.0.1
 port = 5000
