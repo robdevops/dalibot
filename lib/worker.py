@@ -113,7 +113,7 @@ def prepare_image(image_url):
         print(message, file=stderr)
         return False, False, message
     except ImportError as e:
-        message = "Pillow import error: " + str(e) + " check Python version matches the build environment"
+        message = "Pillow import error: " + str(e) + " check Python version and CPU architecture match the build environment"
         print(message, file=stderr)
         return False, False, message
     print("Opening image")
