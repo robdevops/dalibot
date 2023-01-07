@@ -48,7 +48,7 @@ telegramAllowedUserIDs = 123456789 987654321
 * It is recommended to message `/setjoingroups` to BotFather to set your bot group join to `Disabled` after you have added your bot to any desired groups.
 
 ## Secure your endpoint
-* Only allow connections from Telegram's subnets as per the [example Nginx config](doc/standalone.md).
+* Only allow connections from Telegram's subnets as per the [example Nginx config](doc/standalone.md) or the [Amazon API Gateway Resource Policy](doc/serverless.md#amazon-api-gateway-resource-policy)
 * Set `telegramOutgoingToken` to a strong value.
 
 ![Screenshot of chat with Dalibot](doc/dali_5.png?raw=true "a painting of a fox sitting in a field at sunrise in the style of Claude Monet")
