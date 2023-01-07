@@ -127,3 +127,30 @@ Back in the Lambda function, go to the _Code_ tab and then _upload from .zip fil
   curl -iH "Content-Type: application/json" -H "X-Telegram-Bot-Api-Secret-Token: yoursecret" -X POST -d '{"message": {"message_id": 1, "from": {"id": 1, "first_name": "test" }, "chat": {"id": 123, "type": "private"}, "text": "hello" }}' https://xxxxxx.execute-api.us-east-2.amazonaws.com/dalibot
   ```
 * If variations don't work and the log shows `ImportError: cannot import name '_imaging' from 'PIL'`, make sure the Python version under  _Function > Code > Runtime settings_ matches your build environment.
+
+# Security
+Optional: A basic Telegram ACL for API Gateway Console > dalibot > Resource Policy:
+```
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Principal": "*",
+            "Action": "execute-api:Invoke",
+            "Resource": "execute-api:/*/*/*",
+            "Condition": {
+                "IpAddress": {
+                    "aws:SourceIp": [
+                        "149.154.160.0/22",
+                        "149.154.164.0/22",
+                        "149.154.172.0/22",
+                        "91.108.4.0/22",
+                        "91.108.56.0/24"
+                    ]
+                }
+            }
+        }
+    ]
+}
+```
