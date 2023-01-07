@@ -128,7 +128,7 @@ Back in the Lambda function, go to the _Code_ tab and then _upload from .zip fil
   ```
 * If variations don't work and the log shows `ImportError: cannot import name '_imaging' from 'PIL'`, make sure the Python version under  _Function > Code > Runtime settings_ matches your build environment.
 
-# Security
+# Amazon API Gateway ACL
 Optional: A basic Telegram ACL for API Gateway Console > dalibot > Resource Policy:
 ```
 {
