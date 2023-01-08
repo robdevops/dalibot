@@ -8,7 +8,7 @@ These instructions are for AWS. The bot has not been tested under Azure/Google f
 Go to the [Lambda console](https://us-east-2.console.aws.amazon.com/lambda/home)
 * Create a function
   * **Function name:** `dalibot`
-  * **Runtime:** the Python version that matches your build environment (check with `python3 -V`
+  * **Runtime:** the Python version that matches your build environment (check with `python -V` or `python3 -V`)
   * **Architecture:** arm64
   * Hit _Create Function_
 * You should now be in the function on the _Code_ tab. Scroll down to _Runtime settings_, and _Edit_
