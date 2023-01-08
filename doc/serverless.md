@@ -114,7 +114,7 @@ zip dalibot_arm64.zip dalibot.ini
 ```
 
 ### Upload the package
-Back in the Lambda function, go to the _Code_ tab and then _upload from .zip file_, and choose dalibot_arm64.zip from your staging folder.
+Back in the Lambda function, go to the _Code_ tab and then _upload from .zip file_, and choose `dalibot_arm64.zip` from your staging folder.
 
 
 # Testing and troubleshooting
