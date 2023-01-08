@@ -101,8 +101,8 @@ server {
 
 ## ACLs
 If you wish to have the above telegram ACL dynamically update:
+* Remove the existing `allow` lines
 * Uncomment the `include` line
-
 * Install the cron job:
 ```
 sudo cp -v etc/cron.daily/nginx_telegram_cron /etc/cron.daily/
