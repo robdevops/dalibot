@@ -199,6 +199,9 @@ def main(event):
         we turn on async for the Amazon API Gateway by adding header X-Amz-Invocation-Type
         with value 'Event' (including quotes). This is not a final solution, because
         it breaks our ability to respond, as is required for Slack verification requests.
+
+        Therefore, Slack is unsupported in AWS with our current architecture.
+        A second Lambda function with SNS might be a good solution.
         """
         t.join()
 

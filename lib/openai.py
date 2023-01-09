@@ -13,13 +13,19 @@ def imagesGenerations(prompt, size='256x256', number=1):
     try:
         r = urllib.request.urlopen(req, timeout=20)
     except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
-        error = "OpenAI error: " + str(e)
-        print(error, file=stderr)
-        return False, error
-    success, message = processOpenaiUrl(json.load(r), r.code)
+        try:
+            errorjson = json.load(e)
+        except:
+            error = "OpenAI error " + e.code + ": " + str(e)
+            print(error, file=stderr)
+            return False, error
+        else:
+            success, message = processOpenaiUrl(errorjson, e.code)
+    else:
+        success, message = processOpenaiUrl(json.load(r), r.code)
     return success, message
 
-def imagesVariations(imagebytes, size='256x256', number=4):
+def imagesVariations(imagebytes, size='256x256', number=1):
     try:
         import requests
     except ModuleNotFoundError:
@@ -33,10 +39,16 @@ def imagesVariations(imagebytes, size='256x256', number=4):
     try:
         r = requests.post(url, headers=headers, data=data, files=files, timeout=20)
     except requests.exceptions.ConnectionError as e:
-        error = "OpenAI upload error: " + str(e)
-        print(error, file=stderr)
-        return False, error
-    success, message = processOpenaiUrl(r.json(), r.status_code)
+        try:
+            errorjson = r.json()
+        except:
+            error = "OpenAI error " + e.status_code + ": " + str(e)
+            print(error, file=stderr)
+            return False, error
+        else:
+            success, message = processOpenaiUrl(errorjson, e.status_code)
+    else:
+        success, message = processOpenaiUrl(r.json(), r.status_code)
     return success, message
 
 def processOpenaiUrl(result, status_code):
@@ -50,11 +62,10 @@ def processOpenaiUrl(result, status_code):
                 image_url.append(item['url'])
         return True, image_url
     elif 'error' in result:
-        error_code = result['error']['code']
         error_message = result['error']['message']
-        print(status_code, error_code, error_message, file=stderr)
+        print(status_code, "OpenAI", error_message, file=stderr)
         return False, error_message
     else:
-        print(status_code, 'unknown error communicating with OpenAI')
+        print(status_code, 'OpenAI unknown error')
         return False, f'{status_code} unknown error communicating with OpenAI'
 
