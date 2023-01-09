@@ -3,9 +3,6 @@ set -euo pipefail
 
 ME=${0##*/}
 MYDIR=$(realpath $(dirname $0))
-for i in python python{1..9}; do which $i >/dev/null && pybin=$i ;done
-PYTHON_VERSION=$($pybin -V | cut -d' ' -f2)
-PYTHON_VERSION=${PYTHON_VERSION%.*}
 
 parse_args() {
 	while getopts ":h:p:" opt; do
@@ -32,12 +29,11 @@ usage() {
 	exit 3
 }
 
-
 parse_args $@
 mkdir -p ${MYDIR}/staging
 cd ${MYDIR}/staging
-rm -vrf python/lib/*
-pip3 install --platform $pip_platform --only-binary=:all: requests pillow --upgrade --target=${MYDIR}/staging/python/lib/python${PYTHON_VERSION}/site-packages
+rm -vrf Pillow*
+pip3 install --platform $pip_platform --only-binary=:all: requests pillow --upgrade --target=${MYDIR}/staging/
 
 [[ -s bot.py ]] || ln -vs ../bot.py bot.py
 [[ -s lib ]] || ln -vs ../lib lib
