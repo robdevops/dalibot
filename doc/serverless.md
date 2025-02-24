@@ -129,7 +129,7 @@ Back in the Lambda function, go to the _Code_ tab and then _upload from .zip fil
 * If variations don't work and the error contains `ImportError: cannot import name '_imaging' from 'PIL'`, make sure the Python version and CPU architecture under  _Function > Code > Runtime settings_ match your build environment.
 
 # Amazon API Gateway Resource Policy
-Improved security (optional): An example Telegram ACL for API Gateway Console > dalibot > Resource Policy:
+(Optional) Improved security by locking down access to Telegram IP addresses. API Gateway Console > dalibot > Resource Policy:
 ```
 {
     "Version": "2012-10-17",
