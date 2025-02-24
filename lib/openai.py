@@ -3,9 +3,9 @@ from lib.config import *
 from sys import stderr
 from urllib.parse import unquote
 
-def imagesGenerations(prompt, size='256x256', number=1):
+def imagesGenerations(prompt, size='1024x1024', number=1):
 	url = 'https://api.openai.com/v1/images/generations'
-	data = {'prompt': prompt, 'size': size, 'n': number, 'response_format': 'url'}
+	data = {'model': 'dall-e-3', 'prompt': prompt, 'size': size, 'n': number, 'response_format': 'url'}
 	data = json.dumps(data).encode()
 	req = urllib.request.Request(url, data=data, method='POST')
 	req.add_header('Content-Type', 'application/json')
