@@ -1,5 +1,5 @@
 # dalibot
-Telegram chat bot for [DALL·E 2](https://openai.com/dall-e-2/)
+Telegram chat bot for [DALL·E 3](https://openai.com/dall-e-3/)
 
 # Description
 * Responds to a text prompt with an image
