@@ -8,21 +8,21 @@ bot_dir = os.path.realpath(os.path.dirname(__file__) + '/../')
 os.chdir(bot_dir)
 config.read(bot_dir + '/dalibot.ini')
 config['DEFAULT'] = {
-                     'archive': False,
-                     'archive_dir': 'var/cache',
-                     'telegramAllowedUserIDs': '',
-                     'telegramBotCommand': 'dream',
-                     'http_timeout': 10,
-                     'ip': '127.0.0.1',
-                     'port': 5000,
-                     'max_upload_size': 2500000,
-                     'debug': False
-                    }
+					 'archive': False,
+					 'archive_dir': 'var/cache',
+					 'telegramAllowedUserIDs': '',
+					 'telegramBotCommand': 'dream',
+					 'http_timeout': 10,
+					 'ip': '127.0.0.1',
+					 'port': 5000,
+					 'max_upload_size': 2500000,
+					 'debug': False
+					}
 
 config_archive = config.getboolean('main', 'archive')
 config_archive_dir = config['main']['archive_dir'].rstrip('/')
 if not config_archive_dir.startswith('/'):
-    config_archive_dir = bot_dir + '/' + config_archive_dir
+	config_archive_dir = bot_dir + '/' + config_archive_dir
 config_telegramAllowedUserIDs = config['main']['telegramAllowedUserIDs'].split()
 config_telegramBotCommand = config['main']['telegramBotCommand'].lstrip('/')
 config_telegramBotToken = config['main'].get('telegramBotToken', False)
@@ -41,9 +41,9 @@ debug = config.getboolean('main', 'debug')
 
 webhooks = {}
 if 'slack_webhook' in config['main']:
-    webhooks['slack'] = config['main']['slack_webhook'].rstrip('/')
+	webhooks['slack'] = config['main']['slack_webhook'].rstrip('/')
 if 'discord_webhook' in config['main']:
-    webhooks['discord'] = config['main']['discord_webhook'].rstrip('/').replace('/slack', '') + '/slack'
+	webhooks['discord'] = config['main']['discord_webhook'].rstrip('/').replace('/slack', '') + '/slack'
 if 'telegramBotToken' in config['main']:
-    webhooks['telegram'] = 'https://api.telegram.org/bot' + config_telegramBotToken.rstrip('/') + '/'
+	webhooks['telegram'] = 'https://api.telegram.org/bot' + config_telegramBotToken.rstrip('/') + '/'
 
