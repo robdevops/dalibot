@@ -15,6 +15,9 @@ Install git with your package manager, if you don't already have it:
 | Arch Linux | `sudo pacman -S git` |
 | macOS (Homebrew) | `brew install git` |
 | macOS (MacPorts) | `sudo port install git` |
+| FreeBSD, DragonFly BSD | `sudo pkg install git` |
+| OpenBSD | `doas pkg_add git` |
+| NetBSD | `sudo pkgin install git` |
 
 ```
 git clone https://github.com/robdevops/dalibot.git ~/dalibot
