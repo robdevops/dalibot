@@ -65,8 +65,7 @@ Install git with your package manager, if you don't already have it:
 | macOS (MacPorts) | `sudo port install git` |
 | NetBSD | `sudo pkgin install git` |
 | OpenBSD | `doas pkg_add git` |
-| Windows (Chocolatey) | `choco install git` |
-| Windows (winget) | `winget install Git.Git` |
+| Windows | `winget install Git.Git` |
 
 ```
 git clone https://github.com/robdevops/dalibot.git ~/dalibot
