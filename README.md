@@ -22,7 +22,7 @@ Telegram chat bot for [DALL·E 3](https://openai.com/dall-e-3/)
 # Requirements
 * A Telegram bot token from [BotFather](https://t.me/botfather)
 * An [OpenAI API key](https://beta.openai.com/account/api-keys)
-* Python 3.8.10+
+* Python 3.10+
 * For stand-alone mode:
   * A web server with a valid domain and certificate
   * Python gevent module
