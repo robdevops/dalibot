@@ -1,4 +1,4 @@
-import urllib.request, socket, json
+import urllib.request, urllib.error, socket, json, uuid
 from lib.config import *
 from sys import stderr
 from urllib.parse import unquote
@@ -26,30 +26,32 @@ def imagesGenerations(prompt, size='1024x1024', number=1):
 	return success, message
 
 def imagesVariations(imagebytes, size='256x256', number=1):
-	try:
-		import requests
-	except ModuleNotFoundError:
-		error = "This feature requires the requests library to be installed"
-		print(error, file=stderr)
-		return False, error
 	url = 'https://api.openai.com/v1/images/variations'
-	headers = {'Authorization': 'Bearer ' + config_openai_api_key }
-	files = {"image": imagebytes}
-	data = {'size': size, 'n': number, 'response_format': 'url'}
+	boundary = uuid.uuid4().hex
+	fields = {'size': size, 'n': number, 'response_format': 'url'}
+	body = b''
+	for name, value in fields.items():
+		body += f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode()
+	body += f'--{boundary}\r\nContent-Disposition: form-data; name="image"; filename="image.png"\r\nContent-Type: image/png\r\n\r\n'.encode()
+	body += imagebytes + f'\r\n--{boundary}--\r\n'.encode()
+	req = urllib.request.Request(url, data=body, method='POST')
+	req.add_header('Content-Type', 'multipart/form-data; boundary=' + boundary)
+	req.add_header('Authorization', 'Bearer ' + config_openai_api_key)
 	try:
-		r = requests.post(url, headers=headers, data=data, files=files, timeout=20)
-	except requests.exceptions.ConnectionError as e:
+		r = urllib.request.urlopen(req, timeout=20)
+	except urllib.error.HTTPError as e:
 		try:
-			errorjson = r.json()
-		except:
-			error = "OpenAI error " + e.status_code + ": " + str(e)
+			errorjson = json.load(e)
+		except Exception:
+			error = "OpenAI error " + str(e.code) + ": " + str(e)
 			print(error, file=stderr)
 			return False, error
-		else:
-			success, message = processOpenaiUrl(errorjson, e.status_code)
-	else:
-		success, message = processOpenaiUrl(r.json(), r.status_code)
-	return success, message
+		return processOpenaiUrl(errorjson, e.code)
+	except (urllib.error.URLError, socket.timeout) as e:
+		error = "OpenAI connection error: " + str(e)
+		print(error, file=stderr)
+		return False, error
+	return processOpenaiUrl(json.load(r), r.status)
 
 def processOpenaiUrl(result, status_code):
 	if 'data' in result:

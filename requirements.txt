@@ -1,3 +1,4 @@
-gevent==26.9.0
+# Optional: only needed for the image variations feature
 Pillow==13.0.0
-requests==2.34.2
+# Optional: only needed for standalone webhook mode (telegramOutgoingWebhook / Slack)
+gevent==26.9.0

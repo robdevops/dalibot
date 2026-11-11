@@ -33,7 +33,7 @@ parse_args $@
 mkdir -p ${MYDIR}/staging
 cd ${MYDIR}/staging
 rm -vrf Pillow*
-pip3 install --platform $pip_platform --only-binary=:all: requests pillow --upgrade --target=${MYDIR}/staging/
+pip3 install --platform $pip_platform --only-binary=:all: pillow --upgrade --target=${MYDIR}/staging/
 
 [[ -s bot.py ]] || ln -vs ../bot.py bot.py
 [[ -s lib ]] || ln -vs ../lib lib

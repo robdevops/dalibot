@@ -23,12 +23,12 @@ Telegram chat bot for [DALL·E 3](https://openai.com/dall-e-3/)
 * A Telegram bot token from [BotFather](https://t.me/botfather)
 * An [OpenAI API key](https://beta.openai.com/account/api-keys)
 * Python 3.10+
-* For stand-alone mode:
+* For stand-alone mode with Telegram long polling (default): nothing else
+* For stand-alone webhook mode (optional):
   * A web server with a valid domain and certificate
   * Python gevent module
 * If using the image variations feature:
   * Python pillow module
-  * Python requests module
 
 # Setup
 * If managing your own web server, see [WSGI setup](doc/standalone.md)

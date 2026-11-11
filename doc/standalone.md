@@ -1,4 +1,4 @@
-# Setup - standalone (Python WSGI server)
+# Setup - standalone
 
 ![Screenshot of chat with Dalibot](dali_2.png?raw=true "an impressionist oil painting of sunflowers in a purple vase")
 
@@ -11,7 +11,8 @@ sudo $(which apt dnf yum) install git
 git clone https://github.com/robdevops/dalibot.git ~/dalibot
 ```
 
-## Install the Python modules
+## Install the Python modules (optional)
+Text prompts and image generation need no extra modules. Only install these for image variations (Pillow) or webhook mode (gevent):
 ```
 cd ~/dalibot
 ```
@@ -29,13 +30,21 @@ cp dalibot.ini.template dalibot.ini
 ### Mandatory parameters
   * Set `openai_api_key` to the [key from OpenAI](https://beta.openai.com/account/api-keys)
   * Set `telegramBotToken` to the token provided by [BotFather](https://core.telegram.org/bots/tutorial)
-  * Set `telegramOutgoingToken` to a [secret token of your choice](https://core.telegram.org/bots/api#setwebhook)
-  * Set `telegramOutgoingWebhook` to the URL of your Amazon API Gateway stage
 
 Example:
 ```
 openai_api_key = sk-p999HAfj6Cm1bO00SXgJc7kFxvFPtQ1KBBWrqSOU
 telegramBotToken = 4839574812:AAFD39kkdpWt3ywyRZergyOLMaJhac60qc
+```
+
+With only these set, the bot uses Telegram long polling: it connects out to Telegram, so you need no domain, certificate or web server.
+
+### Webhook mode (optional)
+To have Telegram push messages to you instead, also set the following. This needs the gevent module and the front-end web server described below.
+  * Set `telegramOutgoingToken` to a [secret token of your choice](https://core.telegram.org/bots/api#setwebhook)
+  * Set `telegramOutgoingWebhook` to the public URL of your web server
+
+```
 telegramOutgoingToken = sLnHdQmYoohmysecret7PX5VDM4cPW
 telegramOutgoingWebhook = https://www.example.com/dalibot
 ```
@@ -62,17 +71,17 @@ You can enable private messaging by listing telegram numeric ids separated by a 
 telegramAllowedUserIDs = 123456789 987654321
 ```
 
-You can override the listen parameters:
+You can override the listen parameters (webhook mode only):
 ```
 ip = 127.0.0.1
 port = 5000
 ```
 
 ## Start the bot 
-Run `bot.py` to start the listener. By default, it listens on http://127.0.0.1:5000
+Run `bot.py`. In long polling mode it starts polling Telegram. In webhook mode it listens on http://127.0.0.1:5000 by default.
 
 
-# Front-end webserver
+# Front-end webserver (webhook mode only)
 
 ## Point your web server at the bot service
 
