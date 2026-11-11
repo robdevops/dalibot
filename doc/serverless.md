@@ -8,7 +8,7 @@ These instructions are for AWS. The bot has not been tested under Azure/Google f
 Go to the [Lambda console](https://console.aws.amazon.com/lambda/home)
 * Create a function
   * **Function name:** `dalibot`
-  * **Runtime:** the Python version that matches your build environment (check with `python -V` or `python3 -V`)
+  * **Runtime:** a Python version that matches the one you build for. By default the build script uses the Python on your build machine (check with `python -V` or `python3 -V`); to build for a different version, pass `-v` (see below)
   * **Architecture:** arm64
   * Hit _Create Function_
 * You should now be in the function on the _Code_ tab. Scroll down to _Runtime settings_, and _Edit_
@@ -77,6 +77,11 @@ cd ~/dalibot
 ```
 ```
 bash build_serverless.sh -p arm64
+```
+
+By default the package is built for the Python version running on your build machine. To build for a different Lambda runtime, add `-v` (for example `-v 3.13`). The Python version you choose must match the runtime you select in the function's _Runtime settings_.
+```
+bash build_serverless.sh -p arm64 -v 3.13
 ```
 
 ### Complete the config
