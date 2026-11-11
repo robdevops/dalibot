@@ -1,4 +1,4 @@
-# Setup - server-hosted
+# Setup - self-hosted
 
 ![Screenshot of chat with Dalibot](dali_2.png?raw=true "an impressionist oil painting of sunflowers in a purple vase")
 
