@@ -44,7 +44,7 @@ else
     if [[ -f ../dalibot.ini ]]; then
         cp -v ../dalibot.ini dalibot.ini
     else
-        cp -v ../dalibot.ini.example dalibot.ini
+        cp -v ../dalibot.ini.template dalibot.ini
     fi
 fi
 
