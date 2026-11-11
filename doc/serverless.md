@@ -121,13 +121,18 @@ You can enable private messaging by listing telegram numeric ids separated by a 
 TELEGRAM_ALLOWED_USER_IDS="123456789 987654321"
 ```
 
+### Register the webhook with Telegram
+The bot registers your webhook with Telegram when the function starts, which happens on its first invocation. Go to the _Test_ tab in the Lambda function and run any test event. The test itself is ignored (it has no Telegram message), but the logs should show:
+```
+Registering Telegram webhook: {"ok":true,"result":true,"description":"Webhook was set"}
+Registering Telegram bot commands: {"ok":true,"result":true}
+```
+Telegram remembers the webhook, so you only need to do this again if you change `TELEGRAM_BOT_TOKEN`, `TELEGRAM_OUTGOING_TOKEN` or `TELEGRAM_OUTGOING_WEBHOOK`.
+
 
 # Testing and troubleshooting
 * Message the bot, then monitor the logs from Lambda Function > _Monitor > Logs_, or from the [CloudWatch console](https://console.aws.amazon.com/cloudwatch/home) under _Logs_ > _Log groups_.
-* The function can also be triggered in various ways, but these will fail at various points because they won't receive the Telegram json payload:
-  * From the _Test_ tab in the Lambda function
-  * From the POST - Method execution in API Gateway console.
-  * With curl, for example:
+* The function can also be triggered in other ways, but only a request with a Telegram json payload gets a reply. The _Test_ tab and the POST - Method execution in API Gateway console send no payload, so the bot logs "Ignoring invocation without a request body". With curl you can send one, for example:
   ```
   curl -iH "Content-Type: application/json" -H "X-Telegram-Bot-Api-Secret-Token: yoursecret" -X POST -d '{"message": {"message_id": 1, "from": {"id": 1, "first_name": "test" }, "chat": {"id": 123, "type": "private"}, "text": "hello" }}' https://xxxxxx.execute-api.us-east-2.amazonaws.com/dalibot
   ```

@@ -161,8 +161,12 @@ def poll():
 def main(event):
 	if debug:
 		print(json.dumps(event, indent=4))
-	inbound = event['body']
-	uri = event['uri']
+	inbound = event.get('body')
+	uri = event.get('uri')
+	if not inbound or not uri:
+		# e.g. the Lambda console Test tab: nothing to process, but start-up has registered the webhook
+		print("Ignoring invocation without a request body", file=stderr)
+		return
 	# triage request - the Great Big If
 	file_id=False
 	user=''
