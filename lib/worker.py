@@ -71,7 +71,7 @@ def process_request(service, chat_id, user, message, botName, userRealName, chat
 				success, image_url = openai.imagesGenerations(message, size, 1)
 				if success:
 					print("Sending result to Telegram")
-					telegram.sendPhoto(chat_id, image_url, message)
+					telegram.sendPhoto(chat_id, image_url, message, reload_button=True)
 					if config_archive:
 						image_bytesio = download_file(image_url)
 						filename = config_archive_dir + '/image_' + str(now) + '.png'

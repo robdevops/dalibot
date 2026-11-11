@@ -102,6 +102,8 @@ def parseTelegram(inbound):
 	"""Extract what the worker needs from a Telegram update. Returns None if it should be ignored."""
 	file_id = False
 	user = userRealName = ''
+	if "callback_query" in inbound:
+		return parseTelegramCallback(inbound["callback_query"])
 	if "message" not in inbound:
 		return
 	msg = inbound["message"]
@@ -139,6 +141,29 @@ def parseTelegram(inbound):
 		print("[telegram]: unhandled message without text/photo/document")
 		return
 	return chat_id, user, userRealName, message, chat_type, message_id, file_id
+
+def parseTelegramCallback(query):
+	"""A press of the Reload button: regenerate from the prompt, which is the photo's caption."""
+	if query.get("data") != "reload" or "message" not in query:
+		return
+	telegram.answerCallbackQuery(query["id"], "Generating again...")
+	msg = query["message"]
+	prompt = msg.get("caption")
+	if not prompt:
+		return
+	sender = query["from"]
+	user_id = str(sender["id"])
+	chat_type = msg["chat"]["type"]
+	if chat_type == "private" and user_id not in config_telegramAllowedUserIDs:
+		print(user_id, "is not whitelisted. Ignoring.", file=stderr)
+		return
+	user = '@' + sender["username"] if "username" in sender else '@' + sender["first_name"]
+	userRealName = sender["first_name"]
+	# reply to the original prompt message if it still exists
+	reply_to = msg.get("reply_to_message", {}).get("message_id")
+	message_id = str(reply_to) if reply_to else None
+	print("[Telegram reload]:", user, prompt)
+	return str(msg["chat"]["id"]), user, userRealName, '/dream ' + prompt, chat_type, message_id, False
 
 def poll():
 	"""Telegram long polling: no web server, domain or certificate required."""

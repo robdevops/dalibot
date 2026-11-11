@@ -17,6 +17,7 @@ Telegram chat bot for [DALL·E 3](https://openai.com/dall-e-3/)
 # Usage
 * The prompt must be three or more words
 * The prompt must begin with `/dream`. Alternatively, @mention the bot if it has admin access in the group.
+* Each generated image has a 🔄 Reload button that asks OpenAI to generate it again from the same prompt. (Image variations do not get one.)
 * The bot only responds in group chats, unless you set `TELEGRAM_ALLOWED_USER_IDS`
 
 # Requirements
