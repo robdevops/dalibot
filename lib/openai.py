@@ -7,6 +7,8 @@ from urllib.parse import unquote
 def imagesGenerations(prompt, size='1024x1024', number=1):
 	url = 'https://api.openai.com/v1/images/generations'
 	data = {'model': config_openai_image_model, 'prompt': prompt, 'size': size, 'n': number}
+	if debug:
+		data['quality'] = 'low' # cheaper
 	data = json.dumps(data).encode()
 	req = urllib.request.Request(url, data=data, method='POST')
 	req.add_header('Content-Type', 'application/json')
@@ -26,9 +28,13 @@ def imagesGenerations(prompt, size='1024x1024', number=1):
 		success, message = processOpenaiUrl(json.load(r), r.code)
 	return success, message
 
-def imagesVariations(imagebytes, size='256x256', number=1):
-	url = 'https://api.openai.com/v1/images/variations'
-	content_type, body = multipart.encode({'size': size, 'n': number}, {'image': ('image.png', 'image/png', imagebytes)})
+def imagesVariations(imagebytes, prompt, size='1024x1024', number=1):
+	# OpenAI retired the dedicated variations endpoint (DALL-E 2), so we ask the edits endpoint for variations
+	url = 'https://api.openai.com/v1/images/edits'
+	fields = {'model': config_openai_image_model, 'prompt': prompt, 'size': size, 'n': number}
+	if debug:
+		fields['quality'] = 'low' # cheaper
+	content_type, body = multipart.encode(fields, {'image': ('image.png', 'image/png', imagebytes)})
 	req = urllib.request.Request(url, data=body, method='POST')
 	req.add_header('Content-Type', content_type)
 	req.add_header('Authorization', 'Bearer ' + config_openai_api_key)

@@ -30,13 +30,10 @@ def process_request(service, chat_id, user, message, botName, userRealName, chat
 				error_to_telegram(chat_id, message, message_id)
 				return
 			print("Uploading image to OpenAI")
-			if debug:
-				size='256x256'
-				variations=2
-			else:
-				size='1024x1024'
-				variations=4
-			success, image_url = openai.imagesVariations(image_data, size, variations)
+			size='1024x1024'
+			variations = 2 if debug else 4
+			prompt = message if message else 'Create a variation of this image'
+			success, image_url = openai.imagesVariations(image_data, prompt, size, variations)
 			if success:
 				print("Sending result to Telegram")
 				if cropped:
@@ -64,10 +61,7 @@ def process_request(service, chat_id, user, message, botName, userRealName, chat
 			message = message.replace(botName, '').replace('/dream', '').strip()
 			if len(message.split()) > 2:
 				print("Sending prompt to OpenAI")
-				if debug:
-					size='256x256'
-				else:
-					size='1024x1024'
+				size='1024x1024'
 				success, image_url = openai.imagesGenerations(message, size, 1)
 				if success:
 					print("Sending result to Telegram")

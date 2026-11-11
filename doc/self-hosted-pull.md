@@ -60,9 +60,9 @@ You can make stderr more verbose:
 DALIBOT_DEBUG=1
 ```
 
-You can choose the OpenAI image model (defaults to `dall-e-3`). GPT image models such as `gpt-image-1` also work:
+You can choose the OpenAI image model (defaults to `gpt-image-1.5`). Use any GPT image model your account can access:
 ```
-OPENAI_IMAGE_MODEL=dall-e-3
+OPENAI_IMAGE_MODEL=gpt-image-1.5
 ```
 
 You can customise the bot command:
