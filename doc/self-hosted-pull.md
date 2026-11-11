@@ -10,14 +10,14 @@ Install git with your package manager, if you don't already have it:
 
 | System | Command |
 | --- | --- |
-| Debian, Ubuntu | `sudo apt install git` |
-| Fedora, RHEL | `sudo dnf install git` |
 | Arch Linux | `sudo pacman -S git` |
+| Debian, Ubuntu | `sudo apt install git` |
+| DragonFly BSD, FreeBSD | `sudo pkg install git` |
+| Fedora, RHEL | `sudo dnf install git` |
 | macOS (Homebrew) | `brew install git` |
 | macOS (MacPorts) | `sudo port install git` |
-| FreeBSD, DragonFly BSD | `sudo pkg install git` |
-| OpenBSD | `doas pkg_add git` |
 | NetBSD | `sudo pkgin install git` |
+| OpenBSD | `doas pkg_add git` |
 
 ```
 git clone https://github.com/robdevops/dalibot.git ~/dalibot
