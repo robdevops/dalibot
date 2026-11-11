@@ -8,7 +8,8 @@ import urllib.request, socket
 
 from lib.config import *
 import lib.telegram as telegram
-import lib.openai as openai
+import lib.openrouter as openrouter
+from lib.multipart import image_type
 
 def process_request(service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id=False):
 	now = int(time.time())
@@ -29,15 +30,14 @@ def process_request(service, chat_id, user, message, botName, userRealName, chat
 				message = image_data
 				error_to_telegram(chat_id, message, message_id)
 				return
-			print("Uploading image to OpenAI")
-			size='1024x1024'
+			print("Uploading image to OpenRouter")
 			variations = 2 if debug else 4
 			prompt = message if message else 'Create a variation of this image'
-			success, image_url = openai.imagesVariations(image_data, prompt, size, variations)
+			success, image_url = openrouter.variations(image_data, prompt, variations)
 			if success:
 				print("Sending result to Telegram")
 				if cropped:
-					message = message + "\nNote: I centre-cropped your non-square image before sending it to OpenAI"
+					message = message + "\nNote: I centre-cropped your non-square image before sending it to the image model"
 				if isinstance(image_url, list):
 					telegram.sendMediaGroup(chat_id, image_url, message)
 				else:
@@ -45,11 +45,11 @@ def process_request(service, chat_id, user, message, botName, userRealName, chat
 				if config_archive:
 					if isinstance(image_url, list):
 						for idx, url in enumerate(image_url):
-							filename = config_archive_dir + '/variation_' + str(now) + '_' + str(idx+1) + '.png'
+							filename = config_archive_dir + '/variation_' + str(now) + '_' + str(idx+1) + '.' + image_type(url)[0]
 							threading.Thread(target=url_to_file(url, filename)).start()
 						print("end of batch")
 					else:
-						filename = config_archive_dir + '/image_variation_' + str(now) + '.png'
+						filename = config_archive_dir + '/image_variation_' + str(now) + '.' + image_type(image_url)[0]
 						image_bytesio = download_file(image_url)
 						bytesio_to_file(image_bytesio, filename)
 			elif len(image_url):
@@ -60,15 +60,14 @@ def process_request(service, chat_id, user, message, botName, userRealName, chat
 		if message.startswith(botName) or message.startswith('/dream') or chat_type == 'private':
 			message = message.replace(botName, '').replace('/dream', '').strip()
 			if len(message.split()) > 2:
-				print("Sending prompt to OpenAI")
-				size='1024x1024'
-				success, image_url = openai.imagesGenerations(message, size, 1)
+				print("Sending prompt to OpenRouter")
+				success, image_url = openrouter.generate(message)
 				if success:
 					print("Sending result to Telegram")
 					telegram.sendPhoto(chat_id, image_url, message, reload_button=True)
 					if config_archive:
 						image_bytesio = download_file(image_url)
-						filename = config_archive_dir + '/image_' + str(now) + '.png'
+						filename = config_archive_dir + '/image_' + str(now) + '.' + image_type(image_url)[0]
 						bytesio_to_file(image_bytesio, filename)
 				elif len(image_url):
 					message = image_url

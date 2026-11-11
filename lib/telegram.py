@@ -92,7 +92,8 @@ def sendPhoto(chat_id, photo_url, caption, message_id=None, reload_button=False)
 		# image data rather than a URL: upload it
 		del data['photo']
 		data = {k: (json.dumps(v) if isinstance(v, dict) else str(v).lower() if isinstance(v, bool) else v) for k, v in data.items() if v is not None}
-		content_type, data = multipart.encode(data, {'photo': ('image.png', 'image/png', photo_url)})
+		ext, mime = multipart.image_type(photo_url)
+		content_type, data = multipart.encode(data, {'photo': ('image.' + ext, mime, photo_url)})
 		headers = {'Content-type': content_type}
 	else:
 		data = json.dumps(data).encode('utf-8')
@@ -115,11 +116,11 @@ def sendMediaGroup(chat_id, url_list, caption, message_id=None):
 			sendPhoto(chat_id, item, caption if idx == 0 else '', message_id)
 		return
 	media = []
-	for idx, openai_url in enumerate(url_list):
+	for idx, image_url in enumerate(url_list):
 		if idx == 0:
-			media.append({'type': 'photo', 'media': openai_url, 'caption': caption})
+			media.append({'type': 'photo', 'media': image_url, 'caption': caption})
 		else:
-			media.append({'type': 'photo', 'media': openai_url})
+			media.append({'type': 'photo', 'media': image_url})
 	url = webhooks['telegram'] + "sendMediaGroup?chat_id=" + str(chat_id)
 	data = {
 	'disable_notification': 'true',

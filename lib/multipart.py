@@ -12,3 +12,15 @@ def encode(fields, files):
 		body += data + b'\r\n'
 	body += f'--{boundary}--\r\n'.encode()
 	return 'multipart/form-data; boundary=' + boundary, body
+
+def image_type(data):
+	"""Return (extension, mime type) for image bytes, based on their first bytes."""
+	if data[:8] == b'\x89PNG\r\n\x1a\n':
+		return 'png', 'image/png'
+	if data[:3] == b'\xff\xd8\xff':
+		return 'jpg', 'image/jpeg'
+	if data[:4] == b'RIFF' and data[8:12] == b'WEBP':
+		return 'webp', 'image/webp'
+	if data[:4] == b'GIF8':
+		return 'gif', 'image/gif'
+	return 'png', 'image/png'

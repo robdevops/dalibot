@@ -45,12 +45,12 @@ chmod 600 dalibot.env
 Settings are environment variables, one `NAME=value` per line.
 
 ### Mandatory parameters
-  * Set `OPENAI_API_KEY` to the [key from OpenAI](https://beta.openai.com/account/api-keys)
+  * Set `OPENROUTER_API_KEY` to your [OpenRouter API key](https://openrouter.ai/keys)
   * Set `TELEGRAM_BOT_TOKEN` to the token provided by [BotFather](https://core.telegram.org/bots/tutorial)
 
 Example:
 ```
-OPENAI_API_KEY=sk-p999HAfj6Cm1bO00SXgJc7kFxvFPtQ1KBBWrqSOU
+OPENROUTER_API_KEY=sk-or-v1-0123456789abcdef
 TELEGRAM_BOT_TOKEN=4839574812:AAFD39kkdpWt3ywyRZergyOLMaJhac60qc
 ```
 
@@ -60,9 +60,9 @@ You can make stderr more verbose:
 DALIBOT_DEBUG=1
 ```
 
-You can choose the OpenAI image model (defaults to `gpt-image-1.5`). Use any GPT image model your account can access:
+You can choose the image model (defaults to `openai/gpt-image-2`). Any model from [OpenRouter's image models](https://openrouter.ai/collections/image-models) that accepts text prompts will work; variations need one that also accepts reference images:
 ```
-OPENAI_IMAGE_MODEL=gpt-image-1.5
+OPENROUTER_IMAGE_MODEL=openai/gpt-image-2
 ```
 
 You can customise the bot command:
@@ -70,7 +70,7 @@ You can customise the bot command:
 TELEGRAM_BOT_COMMAND=dream
 ```
 
-You can enable downloading of OpenAI images to disk (defaults to `dalibot/var/cache`). Note: user uploads for variations are never saved.
+You can enable saving generated images to disk (defaults to `dalibot/var/cache`). Note: user uploads for variations are never saved.
 ```
 DALIBOT_ARCHIVE=1
 DALIBOT_ARCHIVE_DIR=var/cache

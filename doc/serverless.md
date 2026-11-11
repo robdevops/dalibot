@@ -91,14 +91,14 @@ Back in the Lambda function, go to the _Code_ tab and then _upload from .zip fil
 Go to _Configuration > Environment variables_ and add the following. See `dalibot.env.template` for the full list.
 
 #### Mandatory parameters
-  * Set `OPENAI_API_KEY` to the [key from OpenAI](https://beta.openai.com/account/api-keys)
+  * Set `OPENROUTER_API_KEY` to your [OpenRouter API key](https://openrouter.ai/keys)
   * Set `TELEGRAM_OUTGOING_TOKEN` to a [secret token of your choice](https://core.telegram.org/bots/api#setwebhook)
   * Set `TELEGRAM_OUTGOING_WEBHOOK` to your API gateway stage Invoke URL from previous section
   * Set `TELEGRAM_BOT_TOKEN` to the token provided by [BotFather](https://core.telegram.org/bots/tutorial)
 
 Example:
 ```
-OPENAI_API_KEY=sk-p999HAfj6Cm1bO00SXgJc7kFxvFPtQ1KBBWrqSOU
+OPENROUTER_API_KEY=sk-or-v1-0123456789abcdef
 TELEGRAM_BOT_TOKEN=4839574812:AAFD39kkdpWt3ywyRZergyOLMaJhac60qc
 TELEGRAM_OUTGOING_TOKEN=sLnHdQmYoohmysecret7PX5VDM4cPW
 TELEGRAM_OUTGOING_WEBHOOK=https://xxxxxx.execute-api.us-east-2.amazonaws.com/dalibot
@@ -111,9 +111,9 @@ You can make stderr more verbose:
 DALIBOT_DEBUG=1
 ```
 
-You can choose the OpenAI image model (defaults to `gpt-image-1.5`). Use any GPT image model your account can access:
+You can choose the image model (defaults to `openai/gpt-image-2`). Any model from [OpenRouter's image models](https://openrouter.ai/collections/image-models) that accepts text prompts will work; variations need one that also accepts reference images:
 ```
-OPENAI_IMAGE_MODEL=gpt-image-1.5
+OPENROUTER_IMAGE_MODEL=openai/gpt-image-2
 ```
 
 You can customise the bot command:
