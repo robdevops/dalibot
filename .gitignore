@@ -136,4 +136,5 @@ var/cache/*
 .env
 *.conf
 *.ini
+dalibot.env
 staging

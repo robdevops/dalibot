@@ -55,18 +55,8 @@ fi
 [[ -s bot.py ]] || ln -vs ../bot.py bot.py
 [[ -s lib ]] || ln -vs ../lib lib
 
-if [[ -f dalibot.ini ]]; then
-    zip -r dalibot_${PLATFORM}.zip . && echo -e "\ndalibot_${PLATFORM}.zip created."
-else
-    if [[ -f ../dalibot.ini ]]; then
-        cp -v ../dalibot.ini dalibot.ini
-    else
-        cp -v ../dalibot.ini.template dalibot.ini
-    fi
-fi
+rm -f dalibot_${PLATFORM}.zip
+zip -rq dalibot_${PLATFORM}.zip . && echo -e "\ndalibot_${PLATFORM}.zip created."
 
-echo "If you still need to edit the config, do so and then update the package:"
-echo "cd ${MYDIR}/staging"
-echo "Edit dalibot.ini"
-echo "zip dalibot_${PLATFORM}.zip dalibot.ini"
+echo "Upload it to your function, then set your config as environment variables."
 echo "See ${MYDIR}/doc/serverless.md for help"

@@ -84,53 +84,42 @@ By default the package is built for the Python version running on your build mac
 bash build_serverless.sh -p arm64 -v 3.13
 ```
 
-### Complete the config
-```
-cd staging
-```
+### Upload the package
+Back in the Lambda function, go to the _Code_ tab and then _upload from .zip file_, and choose `dalibot_arm64.zip` from `~/dalibot/staging`.
 
-```
-Edit dalibot.ini
-```
+### Configure
+Go to _Configuration > Environment variables_ and add the following. See `dalibot.env.template` for the full list.
 
 #### Mandatory parameters
-  * Set `openai_api_key` to the [key from OpenAI](https://beta.openai.com/account/api-keys)
-  * Set `telegramOutgoingToken` to a [secret token of your choice](https://core.telegram.org/bots/api#setwebhook)
-  * Set `telegramOutgoingWebhook` to your API gateway stage Invoke URL from previous section
-  * Set `telegramBotToken` to the token provided by [BotFather](https://core.telegram.org/bots/tutorial)
+  * Set `OPENAI_API_KEY` to the [key from OpenAI](https://beta.openai.com/account/api-keys)
+  * Set `TELEGRAM_OUTGOING_TOKEN` to a [secret token of your choice](https://core.telegram.org/bots/api#setwebhook)
+  * Set `TELEGRAM_OUTGOING_WEBHOOK` to your API gateway stage Invoke URL from previous section
+  * Set `TELEGRAM_BOT_TOKEN` to the token provided by [BotFather](https://core.telegram.org/bots/tutorial)
 
 Example:
 ```
-openai_api_key = sk-p999HAfj6Cm1bO00SXgJc7kFxvFPtQ1KBBWrqSOU
-telegramBotToken = 4839574812:AAFD39kkdpWt3ywyRZergyOLMaJhac60qc
-telegramOutgoingToken = sLnHdQmYoohmysecret7PX5VDM4cPW
-telegramOutgoingWebhook = https://xxxxxx.execute-api.us-east-2.amazonaws.com/dalibot
+OPENAI_API_KEY=sk-p999HAfj6Cm1bO00SXgJc7kFxvFPtQ1KBBWrqSOU
+TELEGRAM_BOT_TOKEN=4839574812:AAFD39kkdpWt3ywyRZergyOLMaJhac60qc
+TELEGRAM_OUTGOING_TOKEN=sLnHdQmYoohmysecret7PX5VDM4cPW
+TELEGRAM_OUTGOING_WEBHOOK=https://xxxxxx.execute-api.us-east-2.amazonaws.com/dalibot
 ```
 
 #### Optional parameters
 
 You can make stderr more verbose:
 ```
-debug = 1
+DALIBOT_DEBUG=1
 ```
 
 You can customise the bot command:
 ```
-telegramBotCommand = dream
+TELEGRAM_BOT_COMMAND=dream
 ```
 
 You can enable private messaging by listing telegram numeric ids separated by a space:
 ```
-telegramAllowedUserIDs = 123456789 987654321
+TELEGRAM_ALLOWED_USER_IDS="123456789 987654321"
 ```
-
-### Add your config to the package
-```
-zip dalibot_arm64.zip dalibot.ini
-```
-
-### Upload the package
-Back in the Lambda function, go to the _Code_ tab and then _upload from .zip file_, and choose `dalibot_arm64.zip` from your staging folder.
 
 
 # Testing and troubleshooting

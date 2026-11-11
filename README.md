@@ -17,7 +17,7 @@ Telegram chat bot for [DALL·E 3](https://openai.com/dall-e-3/)
 # Usage
 * The prompt must be three or more words
 * The prompt must begin with `/dream`. Alternatively, @mention the bot if it has admin access in the group.
-* The bot only responds in group chats, unless you set `telegramAllowedUserIDs` in dalibot.ini
+* The bot only responds in group chats, unless you set `TELEGRAM_ALLOWED_USER_IDS`
 
 # Requirements
 * A Telegram bot token from [BotFather](https://t.me/botfather)
@@ -37,18 +37,18 @@ Telegram chat bot for [DALL·E 3](https://openai.com/dall-e-3/)
 # Security
 ## Protect your API keys and bot tokens
 ```
-chmod 600 dalibot.ini
+chmod 600 dalibot.env
 ```
 
 ## Preventing Unauthorized use of your bot
-* Because Telegram bots are discoverable by anyone, the bot ignores private messages by default. You can whitelist users in dalibot.ini. User IDs can be obtained from the URL bar when messaging a user on https://web.telegram.org/, or from the bots console output when someone messages it. Example config:
+* Because Telegram bots are discoverable by anyone, the bot ignores private messages by default. You can whitelist users with `TELEGRAM_ALLOWED_USER_IDS`. User IDs can be obtained from the URL bar when messaging a user on https://web.telegram.org/, or from the bots console output when someone messages it. Example config:
 ```
-telegramAllowedUserIDs = 123456789 987654321
+TELEGRAM_ALLOWED_USER_IDS="123456789 987654321"
 ```
 * It is recommended to message `/setjoingroups` to BotFather to set your bot group join to `Disabled` after you have added your bot to any desired groups.
 
 ## Secure your endpoint
 * Only allow connections from Telegram's subnets as per the [example Nginx config](doc/self-hosted-push.md) or the [Amazon API Gateway Resource Policy](doc/serverless.md#amazon-api-gateway-resource-policy)
-* Set `telegramOutgoingToken` to a strong value.
+* Set `TELEGRAM_OUTGOING_TOKEN` to a strong value.
 
 ![Screenshot of chat with Dalibot](doc/dali_5.png?raw=true "a painting of a fox sitting in a field at sunrise in the style of Claude Monet")

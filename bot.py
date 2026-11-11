@@ -246,7 +246,7 @@ if __name__ == '__main__':
 		print("Running as superuser. This is not recommended.", file=stderr)
 	if not webhook_mode:
 		if not config_telegramBotToken:
-			print("Set telegramBotToken (or a webhook) in dalibot.ini", file=stderr)
+			print("Set TELEGRAM_BOT_TOKEN in the environment", file=stderr)
 			exit(1)
 		try:
 			poll()
