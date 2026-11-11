@@ -4,17 +4,17 @@ import os
 from lib.config import *
 
 # Webhook mode (a listening web server) is needed for serverless platforms, Slack,
-# or standalone with telegramOutgoingWebhook set. Otherwise standalone uses
+# or server-hosted with telegramOutgoingWebhook set. Otherwise server-hosted uses
 # Telegram long polling, which needs no web server and no extra modules.
 webhook_mode = bool(config_telegramOutgoingWebhook or config_slackOutgoingWebhook)
 if os.environ.get("AWS_LAMBDA_FUNCTION_NAME") is None and 'GCF_BLOCK_RUNTIME' not in os.environ:
 	if webhook_mode:
-		print("We are running standalone (webhook mode)!")
+		print("We are running server-hosted (webhook mode)!")
 		import gevent.monkey
 		gevent.monkey.patch_all()
 		from gevent import pywsgi
 	else:
-		print("We are running standalone (Telegram long polling)!")
+		print("We are running server-hosted (Telegram long polling)!")
 elif 'CNB_STACK_ID' in os.environ and 'google' in os.environ.get("CNB_STACK_ID"):
 	print("We are running as a Google Cloud Function!")
 else:
