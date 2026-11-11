@@ -44,7 +44,13 @@ pip_args=(--platform $pip_platform --only-binary=:all:)
 if [[ -n $PY_VERSION ]]; then
     pip_args+=(--python-version $PY_VERSION --implementation cp)
 fi
-pip3 install "${pip_args[@]}" pillow --upgrade --target=${MYDIR}/staging/
+if ! pip3 install "${pip_args[@]}" pillow --upgrade --target=${MYDIR}/staging/; then
+    echo
+    echo "Pillow has no prebuilt wheel for Python ${PY_VERSION:-$(python3 -V)} on $PLATFORM."
+    echo "This usually means the Python version is too new for Pillow. Try an older runtime, e.g. -v 3.14 or -v 3.13,"
+    echo "and select the same runtime in your cloud function. Check available versions at https://pypi.org/project/pillow/#files"
+    exit 4
+fi
 
 [[ -s bot.py ]] || ln -vs ../bot.py bot.py
 [[ -s lib ]] || ln -vs ../lib lib
