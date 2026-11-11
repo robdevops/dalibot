@@ -23,15 +23,15 @@ Telegram chat bot for [DALL·E 3](https://openai.com/dall-e-3/)
 * A Telegram bot token from [BotFather](https://t.me/botfather)
 * An [OpenAI API key](https://beta.openai.com/account/api-keys)
 * Python 3.10+
-* For self-hosted mode with Telegram long polling (default): nothing else
-* For self-hosted webhook mode (optional):
+* For self-hosted pull mode (long polling): nothing else
+* For self-hosted push mode (webhook, optional):
   * A web server with a valid domain and certificate
   * Python gevent module
 * If using the image variations feature:
   * Python pillow module
 
 # Setup
-* If managing your own web server, see [WSGI setup](doc/self-hosted.md)
+* If self-hosting, see [pull setup](doc/self-hosted-pull.md) (simplest), or [push setup](doc/self-hosted-push.md) (webhook; optional)
 * If running serverless, see [cloud function setup](doc/serverless.md)
 
 # Security
@@ -48,7 +48,7 @@ telegramAllowedUserIDs = 123456789 987654321
 * It is recommended to message `/setjoingroups` to BotFather to set your bot group join to `Disabled` after you have added your bot to any desired groups.
 
 ## Secure your endpoint
-* Only allow connections from Telegram's subnets as per the [example Nginx config](doc/self-hosted.md) or the [Amazon API Gateway Resource Policy](doc/serverless.md#amazon-api-gateway-resource-policy)
+* Only allow connections from Telegram's subnets as per the [example Nginx config](doc/self-hosted-push.md) or the [Amazon API Gateway Resource Policy](doc/serverless.md#amazon-api-gateway-resource-policy)
 * Set `telegramOutgoingToken` to a strong value.
 
 ![Screenshot of chat with Dalibot](doc/dali_5.png?raw=true "a painting of a fox sitting in a field at sunrise in the style of Claude Monet")
