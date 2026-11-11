@@ -60,6 +60,11 @@ You can make stderr more verbose:
 DALIBOT_DEBUG=1
 ```
 
+You can choose the OpenAI image model (defaults to `dall-e-3`). GPT image models such as `gpt-image-1` also work:
+```
+OPENAI_IMAGE_MODEL=dall-e-3
+```
+
 You can customise the bot command:
 ```
 TELEGRAM_BOT_COMMAND=dream

@@ -2,6 +2,7 @@ from lib.config import *
 from sys import stderr
 import concurrent.futures
 import urllib.request, urllib.parse, json, socket
+import lib.multipart as multipart
 
 def setWebhook():
 	url = webhooks['telegram'] + 'setWebhook'
@@ -87,12 +88,19 @@ def sendPhoto(chat_id, photo_url, caption, message_id=None, reload_button=False)
 	if reload_button:
 		# the caption is the prompt, so a press can regenerate without us storing anything
 		data['reply_markup'] = {'inline_keyboard': [[{'text': '\U0001F504 Reload', 'callback_data': 'reload'}]]}
-	data = json.dumps(data).encode('utf-8')
+	if isinstance(photo_url, bytes):
+		# image data rather than a URL: upload it
+		del data['photo']
+		data = {k: (json.dumps(v) if isinstance(v, dict) else str(v).lower() if isinstance(v, bool) else v) for k, v in data.items() if v is not None}
+		content_type, data = multipart.encode(data, {'photo': ('image.png', 'image/png', photo_url)})
+		headers = {'Content-type': content_type}
+	else:
+		data = json.dumps(data).encode('utf-8')
 	req = urllib.request.Request(url, data, headers)
 	try:
 		r = urllib.request.urlopen(req, timeout=config_http_timeout)
 	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
-		print("Failure executing request:", url, data, str(e))
+		print("Failure executing request:", url, str(e))
 		return False
 	if r.code == 200:
 		print(r.code, "OK Telegram sendPhoto", caption)
@@ -101,6 +109,11 @@ def sendPhoto(chat_id, photo_url, caption, message_id=None, reload_button=False)
 		return False
 
 def sendMediaGroup(chat_id, url_list, caption, message_id=None):
+	if any(isinstance(item, bytes) for item in url_list):
+		# albums can't carry uploaded bytes in a JSON request: send them one by one
+		for idx, item in enumerate(url_list):
+			sendPhoto(chat_id, item, caption if idx == 0 else '', message_id)
+		return
 	media = []
 	for idx, openai_url in enumerate(url_list):
 		if idx == 0:

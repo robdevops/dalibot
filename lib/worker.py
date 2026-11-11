@@ -84,6 +84,8 @@ def process_request(service, chat_id, user, message, botName, userRealName, chat
 	return
 
 def download_file(image_url):
+	if isinstance(image_url, bytes):
+		return io.BytesIO(image_url)
 	try:
 		r = urllib.request.urlopen(image_url, timeout=config_http_timeout)
 	except Exception as e:

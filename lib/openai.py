@@ -1,11 +1,12 @@
-import urllib.request, urllib.error, socket, json, uuid
+import urllib.request, urllib.error, socket, json, base64
+import lib.multipart as multipart
 from lib.config import *
 from sys import stderr
 from urllib.parse import unquote
 
 def imagesGenerations(prompt, size='1024x1024', number=1):
 	url = 'https://api.openai.com/v1/images/generations'
-	data = {'model': 'dall-e-3', 'prompt': prompt, 'size': size, 'n': number, 'response_format': 'url'}
+	data = {'model': config_openai_image_model, 'prompt': prompt, 'size': size, 'n': number}
 	data = json.dumps(data).encode()
 	req = urllib.request.Request(url, data=data, method='POST')
 	req.add_header('Content-Type', 'application/json')
@@ -27,15 +28,9 @@ def imagesGenerations(prompt, size='1024x1024', number=1):
 
 def imagesVariations(imagebytes, size='256x256', number=1):
 	url = 'https://api.openai.com/v1/images/variations'
-	boundary = uuid.uuid4().hex
-	fields = {'size': size, 'n': number, 'response_format': 'url'}
-	body = b''
-	for name, value in fields.items():
-		body += f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode()
-	body += f'--{boundary}\r\nContent-Disposition: form-data; name="image"; filename="image.png"\r\nContent-Type: image/png\r\n\r\n'.encode()
-	body += imagebytes + f'\r\n--{boundary}--\r\n'.encode()
+	content_type, body = multipart.encode({'size': size, 'n': number}, {'image': ('image.png', 'image/png', imagebytes)})
 	req = urllib.request.Request(url, data=body, method='POST')
-	req.add_header('Content-Type', 'multipart/form-data; boundary=' + boundary)
+	req.add_header('Content-Type', content_type)
 	req.add_header('Authorization', 'Bearer ' + config_openai_api_key)
 	try:
 		r = urllib.request.urlopen(req, timeout=20)
@@ -55,14 +50,9 @@ def imagesVariations(imagebytes, size='256x256', number=1):
 
 def processOpenaiUrl(result, status_code):
 	if 'data' in result:
-		if len(result['data']) == 1:
-			image_url = result['data'][0]['url']
-		else:
-			image_url = []
-			for item in result['data']:
-				#image_url.append(unquote(item['url']))
-				image_url.append(item['url'])
-		return True, image_url
+		# Older models return a URL; GPT image models always return base64 (bytes)
+		images = [item['url'] if 'url' in item else base64.b64decode(item['b64_json']) for item in result['data']]
+		return True, images[0] if len(images) == 1 else images
 	elif 'error' in result:
 		error_message = result['error']['message']
 		print(status_code, "OpenAI", error_message, file=stderr)
