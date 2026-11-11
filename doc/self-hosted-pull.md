@@ -60,7 +60,7 @@ You can make stderr more verbose:
 DALIBOT_DEBUG=1
 ```
 
-You can choose the image model (defaults to `openai/gpt-image-2`). Any model from [OpenRouter's image models](https://openrouter.ai/collections/image-models) that accepts text prompts will work; variations need one that also accepts reference images:
+You can choose the model behind the default command (defaults to `openai/gpt-image-2`). The `/gpt`, `/flux` and `/qwen` commands always use their own models:
 ```
 OPENROUTER_IMAGE_MODEL=openai/gpt-image-2
 ```

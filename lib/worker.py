@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 import io
+import re
 import time
 from sys import stderr
 import threading
@@ -10,13 +11,29 @@ from lib.config import *
 import lib.telegram as telegram
 import lib.openrouter as openrouter
 from lib.multipart import image_type
+from lib.styles import STYLES
 
-def process_request(service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id=False):
+def parse_command(message, botName):
+	"""Work out which model a message asks for. Returns (command, prompt, addressed).
+	'/flux a cat' -> ('flux', 'a cat', True); '@bot a cat' -> (default command, 'a cat', True)."""
+	text = message.strip()
+	m = re.match(r'^/(\w+)(@\w+)?\s*(.*)$', text, re.S)
+	if m and m.group(1).lower() in image_models:
+		if m.group(2) and botName and m.group(2).lower() != botName.lower():
+			return config_telegramBotCommand, text, False # addressed to a different bot
+		return m.group(1).lower(), m.group(3).strip(), True
+	if botName and text.startswith(botName):
+		return config_telegramBotCommand, text[len(botName):].strip(), True
+	return config_telegramBotCommand, text, False
+
+def process_request(service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id=False, style=None):
 	now = int(time.time())
+	command, prompt, addressed = parse_command(message, botName)
+	model = image_models[command][0]
 	if file_id:
 		print("Detected inbound photo")
-		if message.startswith(botName) or message.startswith('/dream') or chat_type == 'private':
-			message = message.replace(botName, '').replace('/dream', '').strip()
+		if addressed or chat_type == 'private':
+			message = prompt
 			if len(message):
 				message = 'Variation of ' + message
 			print("Downloading from telegram")
@@ -33,7 +50,7 @@ def process_request(service, chat_id, user, message, botName, userRealName, chat
 			print("Uploading image to OpenRouter")
 			variations = 2 if debug else 4
 			prompt = message if message else 'Create a variation of this image'
-			success, image_url = openrouter.variations(image_data, prompt, variations)
+			success, image_url = openrouter.variations(image_data, prompt, variations, model)
 			if success:
 				print("Sending result to Telegram")
 				if cropped:
@@ -57,14 +74,16 @@ def process_request(service, chat_id, user, message, botName, userRealName, chat
 				error_to_telegram(chat_id, message, message_id)
 
 	else:
-		if message.startswith(botName) or message.startswith('/dream') or chat_type == 'private':
-			message = message.replace(botName, '').replace('/dream', '').strip()
+		if addressed or chat_type == 'private':
+			message = prompt # the prompt as the user wrote it; it is also the caption, so buttons can regenerate from it
 			if len(message.split()) > 2:
-				print("Sending prompt to OpenRouter")
-				success, image_url = openrouter.generate(message)
+				print("Sending prompt to OpenRouter:", model, style or "")
+				styled = message + ', ' + STYLES[style][1] if style in STYLES else message
+				success, image_url = openrouter.generate(styled, model)
 				if success:
 					print("Sending result to Telegram")
-					telegram.sendPhoto(chat_id, image_url, message, reload_button=True)
+					caption = message + ('\n\nStyle: ' + STYLES[style][0] if style in STYLES else '')
+					telegram.sendPhoto(chat_id, image_url, caption, reply_markup=telegram.imageKeyboard(command, style if style in STYLES else ''))
 					if config_archive:
 						image_bytesio = download_file(image_url)
 						filename = config_archive_dir + '/image_' + str(now) + '.' + image_type(image_url)[0]

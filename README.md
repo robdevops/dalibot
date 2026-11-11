@@ -15,8 +15,17 @@ Telegram chat bot for AI image generation, powered by [OpenRouter](https://openr
 
 # Usage
 * The prompt must be three or more words
-* The prompt must begin with `/dream`. Alternatively, @mention the bot if it has admin access in the group.
-* Each generated image has a 🔄 Reload button that asks the image model to generate it again from the same prompt. (Image variations do not get one.)
+* The prompt must begin with a command, or @mention the bot if it has admin access in the group. Each command uses a different model:
+
+| Command | Model | Notes |
+| --- | --- | --- |
+| `/dream` | `openai/gpt-image-2` by default | Set `OPENROUTER_IMAGE_MODEL` to change |
+| `/gpt` | `openai/gpt-image-2` | Cheapest |
+| `/flux` | `black-forest-labs/flux-3-image-klein` | Fastest |
+| `/qwen` | `qwen/qwen-image-2.1-turbo` | |
+
+* The same commands work in a photo's caption to get variations from that model.
+* Each generated image has buttons under it: 🔄 Reload generates again with the same model and prompt, and Monet, Dalí, Picasso, 8-bit and EGA regenerate it in that style. (Image variations do not get buttons.)
 * The bot only responds in group chats, unless you set `TELEGRAM_ALLOWED_USER_IDS`
 
 # Requirements

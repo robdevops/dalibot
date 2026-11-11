@@ -22,7 +22,15 @@ config_telegramOutgoingToken = _str('TELEGRAM_OUTGOING_TOKEN')
 config_telegramOutgoingWebhook = _str('TELEGRAM_OUTGOING_WEBHOOK')
 config_http_timeout = int(_str('DALIBOT_HTTP_TIMEOUT', 10))
 config_openrouter_api_key = _str('OPENROUTER_API_KEY')
-config_openrouter_image_model = _str('OPENROUTER_IMAGE_MODEL', 'openai/gpt-image-2')
+config_openrouter_image_model = _str('OPENROUTER_IMAGE_MODEL', 'openai/gpt-image-2') # cheapest of the three
+
+# command -> (model, description). The default command (TELEGRAM_BOT_COMMAND) uses OPENROUTER_IMAGE_MODEL.
+image_models = {
+	'gpt': ('openai/gpt-image-2', 'GPT Image 2 (cheapest)'),
+	'flux': ('black-forest-labs/flux-3-image-klein', 'FLUX.3 Klein (fastest)'),
+	'qwen': ('qwen/qwen-image-2.1-turbo', 'Qwen Image 2.1 Turbo'),
+}
+image_models[config_telegramBotCommand] = (config_openrouter_image_model, 'the default model')
 config_image_timeout = int(_str('DALIBOT_IMAGE_TIMEOUT', 120))
 config_slackOAuthToken = _str('SLACK_OAUTH_TOKEN')
 config_slackOutgoingToken = _str('SLACK_OUTGOING_TOKEN')

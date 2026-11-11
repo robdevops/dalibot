@@ -3,6 +3,7 @@ from sys import stderr
 import concurrent.futures
 import urllib.request, urllib.parse, json, socket
 import lib.multipart as multipart
+from lib.styles import STYLES
 
 def setWebhook():
 	url = webhooks['telegram'] + 'setWebhook'
@@ -74,7 +75,14 @@ def answerCallbackQuery(callback_query_id, text=None):
 		print("Failure executing request:", url, str(e), file=stderr)
 		return False
 
-def sendPhoto(chat_id, photo_url, caption, message_id=None, reload_button=False):
+def imageKeyboard(command, style=''):
+	"""Buttons under an image. callback_data is 'g:<command>:<style>': generate again with that model and style."""
+	def button(text, style_key):
+		return {'text': text, 'callback_data': f'g:{command}:{style_key}'}
+	styles = [button(label, key) for key, (label, _) in STYLES.items()]
+	return {'inline_keyboard': [[button('\U0001F504 Reload', style)], styles[:3], styles[3:]]}
+
+def sendPhoto(chat_id, photo_url, caption, message_id=None, reply_markup=None):
 	url = webhooks['telegram'] + "sendPhoto?chat_id=" + str(chat_id)
 	headers = {'Content-type': 'application/json'}
 	data = {
@@ -85,9 +93,8 @@ def sendPhoto(chat_id, photo_url, caption, message_id=None, reload_button=False)
 	"allow_sending_without_reply": True,
 	"reply_to_message_id": message_id
 	}
-	if reload_button:
-		# the caption is the prompt, so a press can regenerate without us storing anything
-		data['reply_markup'] = {'inline_keyboard': [[{'text': '\U0001F504 Reload', 'callback_data': 'reload'}]]}
+	if reply_markup:
+		data['reply_markup'] = reply_markup
 	if isinstance(photo_url, bytes):
 		# image data rather than a URL: upload it
 		del data['photo']
@@ -188,8 +195,11 @@ def sendMessage(chat_id, message, message_id=None):
 def setMyCommands():
 	url = webhooks['telegram'] + "setMyCommands"
 	headers = {'Content-type': 'application/json'}
-	command = [{'command': config_telegramBotCommand, 'description': 'generate an image from at least three words'}]
-	data = {'commands': command}
+	commands = [{'command': config_telegramBotCommand, 'description': 'generate an image from at least three words'}]
+	for name, (model, description) in image_models.items():
+		if name != config_telegramBotCommand:
+			commands.append({'command': name, 'description': 'same, using ' + description})
+	data = {'commands': commands}
 	data = json.dumps(data).encode('utf-8')
 	req = urllib.request.Request(url, data, headers, method='POST')
 	try:
