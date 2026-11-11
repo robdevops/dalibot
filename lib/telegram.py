@@ -16,9 +16,34 @@ def setWebhook():
 	try:
 		r = urllib.request.urlopen(req, timeout=config_http_timeout)
 	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
-		print("Failure executing request:", url, headers.decode(), data, str(e))
+		print("Failure executing request:", url, data, str(e))
 		return False
 	print("Registering Telegram webhook:", r.read().decode(), file=stderr)
+
+def deleteWebhook():
+	# Telegram refuses getUpdates while a webhook is registered
+	url = webhooks['telegram'] + 'deleteWebhook'
+	req = urllib.request.Request(url, b'', method='POST')
+	try:
+		r = urllib.request.urlopen(req, timeout=config_http_timeout)
+	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
+		print("Failure executing request:", url, str(e))
+		return False
+	print("Removing Telegram webhook (long polling mode):", r.read().decode(), file=stderr)
+
+def getUpdates(offset=None, poll_timeout=50):
+	"""Long poll for new messages. Returns a list (possibly empty), or None on error."""
+	url = webhooks['telegram'] + 'getUpdates'
+	data = {'timeout': poll_timeout, 'allowed_updates': ['message']}
+	if offset is not None:
+		data['offset'] = offset
+	req = urllib.request.Request(url, json.dumps(data).encode(), {'Content-type': 'application/json'}, method='POST')
+	try:
+		r = urllib.request.urlopen(req, timeout=poll_timeout + config_http_timeout)
+		return json.load(r)['result']
+	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout, ValueError, KeyError) as e:
+		print("Failure executing request:", url, str(e), file=stderr)
+		return None
 
 def getMe():
 	url = webhooks['telegram'] + 'getMe'
@@ -28,7 +53,7 @@ def getMe():
 	try:
 		r = urllib.request.urlopen(req, timeout=config_http_timeout)
 	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
-		print("Failure executing request:", url, headers, data, str(e))
+		print("Failure executing request:", url, data, str(e))
 		return False
 	if r.code != 200:
 		print(r.code, "error Telegram getMe")
@@ -51,7 +76,7 @@ def sendPhoto(chat_id, photo_url, caption, message_id=None):
 	try:
 		r = urllib.request.urlopen(req, timeout=config_http_timeout)
 	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
-		print("Failure executing request:", url, headers, data, str(e))
+		print("Failure executing request:", url, data, str(e))
 		return False
 	if r.code == 200:
 		print(r.code, "OK Telegram sendPhoto", caption)
@@ -80,7 +105,7 @@ def sendMediaGroup(chat_id, url_list, caption, message_id=None):
 	try:
 		r = urllib.request.urlopen(req, timeout=config_http_timeout)
 	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
-		print("Failure executing request:", url, headers, data, str(e))
+		print("Failure executing request:", url, data, str(e))
 		return False
 	if r.code == 200:
 		print(r.code, "OK Telegram sendMediaGroup", caption)
@@ -149,7 +174,7 @@ def setMyCommands():
 
 if config_telegramBotToken:
 	with concurrent.futures.ThreadPoolExecutor() as executor:
-		executor.submit(setWebhook)
+		executor.submit(setWebhook if config_telegramOutgoingWebhook else deleteWebhook)
 		executor.submit(setMyCommands)
 		thread = executor.submit(getMe)
 		botName = '@' + thread.result()['username']

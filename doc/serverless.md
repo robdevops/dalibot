@@ -53,9 +53,20 @@ Go to the [API Gateway console](https://console.aws.amazon.com/apigateway/home)
 ## Prepare the Lambda package
 
 ### Clone the git repo
-```
-sudo $(which apt dnf yum) install git
-```
+Install git with your package manager, if you don't already have it:
+
+| System | Command |
+| --- | --- |
+| Arch Linux | `sudo pacman -S git` |
+| Debian, Ubuntu | `sudo apt install git` |
+| DragonFly BSD, FreeBSD | `sudo pkg install git` |
+| Fedora, RHEL | `sudo dnf install git` |
+| macOS (Homebrew) | `brew install git` |
+| macOS (MacPorts) | `sudo port install git` |
+| NetBSD | `sudo pkgin install git` |
+| OpenBSD | `doas pkg_add git` |
+| Windows | `winget install Git.Git` |
+
 ```
 git clone https://github.com/robdevops/dalibot.git ~/dalibot
 ```
