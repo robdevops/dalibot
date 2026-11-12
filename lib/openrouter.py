@@ -203,7 +203,8 @@ def variation_prompt(note, look):
 def variations(image_bytes, note, number=4, model=None, looks=None):
 	"""Ask for variations of an image, each with its own style and viewpoint. note is what the user wrote, if anything.
 	looks can be supplied (from variation_looks, possibly fetched earlier in parallel). One request per image, because many
-	models cap n at 1. Returns (True, image_bytes or [image_bytes...]) or (False, error message)."""
+	models cap n at 1. Returns (True, image_bytes or [image_bytes...], looks) or (False, error message), where looks lists
+	the (style, viewpoint) of each image that came back, in the same order, so they can be shown to the user."""
 	looks = looks or variation_looks(note, number)
 	data_url = 'data:image/png;base64,' + base64.b64encode(image_bytes).decode()
 	reference = [{'type': 'image_url', 'image_url': {'url': data_url}}]
@@ -213,7 +214,8 @@ def variations(image_bytes, note, number=4, model=None, looks=None):
 	images = [image for ok, image in results if ok]
 	if not images:
 		return results[0]
-	return True, images[0] if len(images) == 1 else images
+	used = [look for look, (ok, image) in zip(looks, results) if ok]
+	return True, images[0] if len(images) == 1 else images, used
 
 def _ask(system, user, max_tokens, temperature):
 	"""One call to the cheap text model. Returns its reply, or raises."""
