@@ -117,6 +117,14 @@ def replyCredits(chat_id, user_id, message_id):
 		return
 	telegram.sendMessage(chat_id, "OpenRouter spend\ntoday: " + money(spent['today']) + "\nweek: " + money(spent['week']) + "\nmonth: " + money(spent['month']), message_id)
 
+def imageFileId(msg):
+	"""The Telegram file_id of the picture in a message (largest size of a photo, or an image sent as a file), if any."""
+	if msg.get("photo"):
+		return msg["photo"][-1]["file_id"]
+	document = msg.get("document") or {}
+	if document.get("mime_type", "").startswith("image/"):
+		return document["file_id"]
+
 def parseTelegram(inbound):
 	"""Extract what the worker needs from a Telegram update. Returns None if it should be ignored."""
 	file_id = False
@@ -148,6 +156,12 @@ def parseTelegram(inbound):
 		if command in CREDITS_COMMANDS and (addressed or chat_type == "private"):
 			replyCredits(chat_id, user_id, message_id)
 			return
+		# Tagging the bot (or sending a bare command) in reply to a picture asks for variations of that picture.
+		# A command with a prompt, like "/dream a red fox", stays a text prompt even when it is a reply.
+		replied_image = imageFileId(msg.get("reply_to_message") or {})
+		if replied_image and addressed and (not prompt or (botName and message.strip().startswith(botName))):
+			file_id = replied_image
+			print("[Telegram reply to a picture]:", user, message)
 	elif "photo" in msg:
 		message = msg.get("caption", '')
 		file_id = msg["photo"][-1]["file_id"]
