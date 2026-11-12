@@ -75,6 +75,16 @@ def answerCallbackQuery(callback_query_id, text=None):
 		print("Failure executing request:", url, str(e), file=stderr)
 		return False
 
+def sendChatAction(chat_id, action='typing'):
+	"""Show 'typing...' in the chat. Telegram clears it after about 5 seconds."""
+	url = webhooks['telegram'] + "sendChatAction"
+	data = json.dumps({'chat_id': chat_id, 'action': action}).encode('utf-8')
+	req = urllib.request.Request(url, data, {'Content-type': 'application/json'}, method='POST')
+	try:
+		urllib.request.urlopen(req, timeout=config_http_timeout)
+	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout):
+		pass # purely cosmetic
+
 def imageKeyboard(command, style=''):
 	"""Buttons under an image. callback_data is 'g:<command>:<style>': generate again with that model and style."""
 	def button(text, style_key):

@@ -26,13 +26,41 @@ def parse_command(message, botName):
 		return config_telegramBotCommand, text[len(botName):].strip(), True
 	return config_telegramBotCommand, text, False
 
+class Typing:
+	"""Keeps Telegram's 'typing...' indicator showing while we wait for the image model."""
+	def __init__(self, service, chat_id):
+		self.enabled = service == 'telegram'
+		self.chat_id = chat_id
+		self.stopped = threading.Event()
+
+	def start(self):
+		if self.enabled:
+			threading.Thread(target=self._run, daemon=True).start()
+
+	def _run(self):
+		# the indicator lasts about 5 seconds, so refresh it until we are done
+		while not self.stopped.is_set():
+			telegram.sendChatAction(self.chat_id)
+			self.stopped.wait(4)
+
+	def stop(self):
+		self.stopped.set()
+
 def process_request(service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id=False, style=None):
+	typing = Typing(service, chat_id)
+	try:
+		_process_request(typing, service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id, style)
+	finally:
+		typing.stop()
+
+def _process_request(typing, service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id, style):
 	now = int(time.time())
 	command, prompt, addressed = parse_command(message, botName)
 	model = image_models[command][0]
 	if file_id:
 		print("Detected inbound photo")
 		if addressed or chat_type == 'private':
+			typing.start()
 			message = prompt
 			if len(message):
 				message = 'Variation of ' + message
@@ -77,6 +105,7 @@ def process_request(service, chat_id, user, message, botName, userRealName, chat
 		if addressed or chat_type == 'private':
 			message = prompt # the prompt as the user wrote it; it is also the caption, so buttons can regenerate from it
 			if len(message.split()) > 2:
+				typing.start()
 				print("Sending prompt to OpenRouter:", model, style or "")
 				styled = message + ', ' + STYLES[style][1] if style in STYLES else message
 				success, image_url = openrouter.generate(styled, model)
