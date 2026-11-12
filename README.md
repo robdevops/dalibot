@@ -3,7 +3,7 @@ Telegram chat bot for AI image generation, powered by [OpenRouter](https://openr
 
 # Description
 * Responds to a text prompt with an image
-* Responds to an image with four clearly different variations (a new viewpoint and composition, a different style and mood, both together, and a different pose or action), sent as one album. Add a caption to steer them.
+* Responds to an image with four clearly different variations (two reinterpreted in a different style and mood, and two shown from a new viewpoint and composition with a different mood and treatment), sent as one album. Add a caption to steer them.
 
 ![Screenshot of chat with Dalibot](doc/dali_1.png?raw=true "close up portrait of a girl in the style of Claude Monet")
 

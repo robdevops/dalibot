@@ -144,12 +144,11 @@ def generate(prompt, model=None):
 	return _request({'prompt': prompt}, model)
 
 # Asking a model for "a variation" tends to return near copies, so each image is told to change something
-# different. Four requests, four directions: together they come out clearly unlike the original and each other.
+# specific. With four images, each of these two directions is used twice (the two images of one direction
+# still differ from each other, because image models are not deterministic).
 VARIATION_TWISTS = [
-	"show it from a different viewpoint with a different composition (for example from above, from the side, much closer or much further away)",
 	"reinterpret it in a different style and with a different mood",
 	"show it from a different viewpoint with a different composition, and reinterpret it with a different mood and artistic treatment",
-	"change what the subject is doing: give it a different pose, expression or action",
 ]
 
 def variation_prompt(note, twist):
