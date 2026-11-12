@@ -8,7 +8,7 @@ These instructions are for AWS. The bot has not been tested under Azure/Google f
 Go to the [Lambda console](https://console.aws.amazon.com/lambda/home)
 * Create a function
   * **Function name:** `dalibot`
-  * **Runtime:** the Python version that matches your build environment (check with `python -V` or `python3 -V`)
+  * **Runtime:** a Python version that matches the one you build for. By default the build script uses the Python on your build machine (check with `python -V` or `python3 -V`); to build for a different version, pass `-v` (see below)
   * **Architecture:** arm64
   * Hit _Create Function_
 * You should now be in the function on the _Code_ tab. Scroll down to _Runtime settings_, and _Edit_
@@ -16,7 +16,11 @@ Go to the [Lambda console](https://console.aws.amazon.com/lambda/home)
   * Hit _Save_
 * Go to the _Configuration_ tab
   * Go to _General configuration_ and _Edit_
-    * **Timeout:** `1` min
+    * **Memory:** `512` MB (the bot holds each image in memory several times over; a 2 MB image used 110 of the default 128 MB)
+    * **Timeout:** `3` min (image models can take a minute or more, especially when making variations from a photo; the bot stops waiting a little before this and tells the user, so the function is not killed)
+    * Hit _Save_
+  * Go to _Asynchronous invocation_ and _Edit_
+    * **Retry attempts:** `0`. Lambda otherwise re-runs a failed request automatically, which would make and pay for the same images again.
     * Hit _Save_
 
 ## Create the API Gateway
@@ -79,61 +83,107 @@ cd ~/dalibot
 bash build_serverless.sh -p arm64
 ```
 
-### Complete the config
+By default the package is built for the Python version running on your build machine. To build for a different Lambda runtime, add `-v` (for example `-v 3.13`). The Python version you choose must match the runtime you select in the function's _Runtime settings_.
 ```
-cd staging
+bash build_serverless.sh -p arm64 -v 3.13
 ```
 
-```
-Edit dalibot.ini
-```
+### Upload the package
+Back in the Lambda function, go to the _Code_ tab and then _upload from .zip file_, and choose `dalibot_arm64.zip` from `~/dalibot/staging`.
+
+### Configure
+Go to _Configuration > Environment variables_ and add the following. See `dalibot.env.template` for the full list.
 
 #### Mandatory parameters
-  * Set `openai_api_key` to the [key from OpenAI](https://beta.openai.com/account/api-keys)
-  * Set `telegramOutgoingToken` to a [secret token of your choice](https://core.telegram.org/bots/api#setwebhook)
-  * Set `telegramOutgoingWebhook` to your API gateway stage Invoke URL from previous section
-  * Set `telegramBotToken` to the token provided by [BotFather](https://core.telegram.org/bots/tutorial)
+  * Set `OPENROUTER_API_KEY` to your [OpenRouter API key](https://openrouter.ai/keys)
+  * Set `TELEGRAM_OUTGOING_TOKEN` to a [secret token of your choice](https://core.telegram.org/bots/api#setwebhook)
+  * Set `TELEGRAM_OUTGOING_WEBHOOK` to your API gateway stage Invoke URL from previous section
+  * Set `TELEGRAM_BOT_TOKEN` to the token provided by [BotFather](https://core.telegram.org/bots/tutorial)
 
 Example:
 ```
-openai_api_key = sk-p999HAfj6Cm1bO00SXgJc7kFxvFPtQ1KBBWrqSOU
-telegramBotToken = 4839574812:AAFD39kkdpWt3ywyRZergyOLMaJhac60qc
-telegramOutgoingToken = sLnHdQmYoohmysecret7PX5VDM4cPW
-telegramOutgoingWebhook = https://xxxxxx.execute-api.us-east-2.amazonaws.com/dalibot
+OPENROUTER_API_KEY=sk-or-v1-0123456789abcdef
+TELEGRAM_BOT_TOKEN=4839574812:AAFD39kkdpWt3ywyRZergyOLMaJhac60qc
+TELEGRAM_OUTGOING_TOKEN=sLnHdQmYoohmysecret7PX5VDM4cPW
+TELEGRAM_OUTGOING_WEBHOOK=https://xxxxxx.execute-api.us-east-2.amazonaws.com/dalibot
 ```
 
 #### Optional parameters
 
 You can make stderr more verbose:
 ```
-debug = 1
+DALIBOT_DEBUG=1
+```
+
+You can choose the model behind the default command (defaults to `openai/gpt-image-2`). The `/gpt`, `/flux` and `/qwen` commands always use their own models:
+```
+OPENROUTER_IMAGE_MODEL=openai/gpt-image-2
+```
+
+You can choose the cheap text model that removes conflicting words from the prompt when a style button is pressed (defaults to `meta-llama/llama-3.1-8b-instruct`):
+```
+OPENROUTER_TEXT_MODEL=meta-llama/llama-3.1-8b-instruct
 ```
 
 You can customise the bot command:
 ```
-telegramBotCommand = dream
+TELEGRAM_BOT_COMMAND=dream
 ```
 
 You can enable private messaging by listing telegram numeric ids separated by a space:
 ```
-telegramAllowedUserIDs = 123456789 987654321
+TELEGRAM_ALLOWED_USER_IDS="123456789 987654321"
 ```
 
-### Add your config to the package
+If you have already limited who can reach the bot, for example in BotFather, you can allow everyone who can reach it instead:
 ```
-zip dalibot_arm64.zip dalibot.ini
+TELEGRAM_ALLOWED_USER_IDS=all
 ```
 
-### Upload the package
-Back in the Lambda function, go to the _Code_ tab and then _upload from .zip file_, and choose `dalibot_arm64.zip` from your staging folder.
+### Create the DynamoDB table (for image history)
+The bot remembers each image message's prompt and the images made for it (as Telegram file ids, not the images themselves), so the buttons under an image can switch between them. This needs one small DynamoDB table. Without it the bot still works, but the buttons can't go back to earlier images (the logs say `Store ... failed (continuing without history)`).
+
+In the [DynamoDB console](https://console.aws.amazon.com/dynamodbv2/home) choose _Create table_ and set:
+  * **Table name:** `dalibot` (or set `DALIBOT_TABLE` to your name)
+  * **Partition key:** `id`, type _String_
+
+Leave _Table settings_ on _Default settings_ (DynamoDB Standard, On-demand capacity, no indexes) and choose _Create table_. Then open the table's _Additional settings_ and turn on _Time to live_ with the attribute name `ttl`. Old records then delete themselves (after 90 days; change with `DALIBOT_STORE_DAYS`).
+
+Or with the AWS CLI:
+```
+aws dynamodb create-table --table-name dalibot --attribute-definitions AttributeName=id,AttributeType=S --key-schema AttributeName=id,KeyType=HASH --billing-mode PAY_PER_REQUEST
+```
+```
+aws dynamodb update-time-to-live --table-name dalibot --time-to-live-specification Enabled=true,AttributeName=ttl
+```
+
+Then let the function use it. In the Lambda function go to _Configuration > Permissions_ and click the role name under _Execution role_ (it opens in the IAM console). On the role's _Permissions_ tab choose _Add permissions > Create inline policy_, switch to the _JSON_ editor, paste this (replace the region and account number with yours, which you can see in the function's ARN), then choose _Next_, name it (for example `dalibot-dynamodb`) and _Create policy_:
+```
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"],
+            "Resource": "arn:aws:dynamodb:us-east-2:123456789012:table/dalibot"
+        }
+    ]
+}
+```
+Lambda's Python runtime already includes the AWS library (`boto3`), so nothing needs adding to the package.
+
+### Register the webhook with Telegram
+The bot registers your webhook with Telegram when the function starts, which happens on its first invocation. Go to the _Test_ tab in the Lambda function and run any test event. The test itself is ignored (it has no Telegram message), but the logs should show:
+```
+Registering Telegram webhook: {"ok":true,"result":true,"description":"Webhook was set"}
+Registering Telegram bot commands: {"ok":true,"result":true}
+```
+Telegram remembers the webhook, so you only need to do this again if you change `TELEGRAM_BOT_TOKEN`, `TELEGRAM_OUTGOING_TOKEN` or `TELEGRAM_OUTGOING_WEBHOOK`.
 
 
 # Testing and troubleshooting
 * Message the bot, then monitor the logs from Lambda Function > _Monitor > Logs_, or from the [CloudWatch console](https://console.aws.amazon.com/cloudwatch/home) under _Logs_ > _Log groups_.
-* The function can also be triggered in various ways, but these will fail at various points because they won't receive the Telegram json payload:
-  * From the _Test_ tab in the Lambda function
-  * From the POST - Method execution in API Gateway console.
-  * With curl, for example:
+* The function can also be triggered in other ways, but only a request with a Telegram json payload gets a reply. The _Test_ tab and the POST - Method execution in API Gateway console send no payload, so the bot logs "Ignoring invocation without a request body". With curl you can send one, for example:
   ```
   curl -iH "Content-Type: application/json" -H "X-Telegram-Bot-Api-Secret-Token: yoursecret" -X POST -d '{"message": {"message_id": 1, "from": {"id": 1, "first_name": "test" }, "chat": {"id": 123, "type": "private"}, "text": "hello" }}' https://xxxxxx.execute-api.us-east-2.amazonaws.com/dalibot
   ```

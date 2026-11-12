@@ -12,20 +12,20 @@ cd ~/dalibot
 pip3 install gevent
 ```
 
-## Edit dalibot.ini
+## Edit dalibot.env
 Add these to the mandatory parameters:
-  * Set `telegramOutgoingToken` to a [secret token of your choice](https://core.telegram.org/bots/api#setwebhook)
-  * Set `telegramOutgoingWebhook` to the public URL of your web server
+  * Set `TELEGRAM_OUTGOING_TOKEN` to a [secret token of your choice](https://core.telegram.org/bots/api#setwebhook)
+  * Set `TELEGRAM_OUTGOING_WEBHOOK` to the public URL of your web server
 
 ```
-telegramOutgoingToken = sLnHdQmYoohmysecret7PX5VDM4cPW
-telegramOutgoingWebhook = https://www.example.com/dalibot
+TELEGRAM_OUTGOING_TOKEN=sLnHdQmYoohmysecret7PX5VDM4cPW
+TELEGRAM_OUTGOING_WEBHOOK=https://www.example.com/dalibot
 ```
 
 You can override the listen parameters:
 ```
-ip = 127.0.0.1
-port = 5000
+DALIBOT_IP=127.0.0.1
+DALIBOT_PORT=5000
 ```
 
 ## Start the bot

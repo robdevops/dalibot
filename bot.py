@@ -27,6 +27,12 @@ from sys import stderr
 from urllib.parse import urlparse
 
 import lib.worker as worker
+from lib.worker import mentions_bot
+import lib.openrouter as openrouter
+import lib.store as store
+import lib.deadline as deadline
+store.check()
+from lib.styles import STYLES
 if config_telegramBotToken:
 	import lib.telegram as telegram
 	botName = telegram.botName
@@ -35,6 +41,7 @@ import threading
 #import multiprocessing
 
 def lambda_handler(event, context):
+	deadline.start(context) # so slow waits give up before Lambda kills us
 	response = main(event)
 	if response:
 		return response
@@ -89,22 +96,51 @@ def wsgi_handler(environ, start_response):
 	else:
 		return [b'']
 
-def startWorker(service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id):
+def startWorker(service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id, style=None, edit_message_id=None, button=None):
 	def runWorker():
-		worker.process_request(service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id)
+		worker.process_request(service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id, style, edit_message_id, button)
 
 	# process in a background thread so we don't keep the requesting client waiting
 	t = threading.Thread(target=runWorker)
 	t.start()
 	return t
 
+def money(amount):
+	return f'${amount:,.4f}' if amount < 1 else f'${amount:,.2f}'
+
+def replyCredits(chat_id, user_id, message_id):
+	"""/credits (also /tokens, /usage, /cost): what OpenRouter says the bot has spent today, this week and this month.
+	If TELEGRAM_ALLOWED_USER_IDS lists user ids, only those users may ask. With "all", or no list, anyone who can talk to the bot can."""
+	if not config_telegramAllowAll and config_telegramAllowedUserIDs and user_id not in config_telegramAllowedUserIDs:
+		print(user_id, "is not allowed to see spend. Ignoring.", file=stderr)
+		telegram.sendMessage(chat_id, "Sorry, only approved users can see usage.", message_id)
+		return
+	ok, spent = openrouter.spend()
+	if not ok:
+		telegram.sendMessage(chat_id, "Couldn't get usage from OpenRouter: " + spent, message_id)
+		return
+	telegram.sendMessage(chat_id, "OpenRouter spend\ntoday: " + money(spent['today']) + "\nweek: " + money(spent['week']) + "\nmonth: " + money(spent['month']), message_id)
+
+def imageFileId(msg):
+	"""The Telegram file_id of the picture in a message (largest size of a photo, or an image sent as a file), if any."""
+	if msg.get("photo"):
+		return msg["photo"][-1]["file_id"]
+	document = msg.get("document") or {}
+	if document.get("mime_type", "").startswith("image/"):
+		return document["file_id"]
+
 def parseTelegram(inbound):
 	"""Extract what the worker needs from a Telegram update. Returns None if it should be ignored."""
 	file_id = False
 	user = userRealName = ''
-	if "message" not in inbound:
+	if "callback_query" in inbound:
+		return parseTelegramCallback(inbound["callback_query"])
+	# An edited message arrives as its own kind of update. We only react to an edit that tags the bot (or is a command),
+	# so fixing a typo in an ordinary message does nothing.
+	edited = "message" not in inbound and "edited_message" in inbound
+	if "message" not in inbound and not edited:
 		return
-	msg = inbound["message"]
+	msg = inbound["edited_message"] if edited else inbound["message"]
 	message_id = str(msg["message_id"])
 	chat_id = str(msg["chat"]["id"])
 	user_id = str(msg["from"]["id"])
@@ -115,7 +151,7 @@ def parseTelegram(inbound):
 	else:
 		user = userRealName = '@' + msg["from"]["first_name"]
 	if chat_type == "private": # Anyone can find and PM the bot so we need to be careful
-		if user_id in config_telegramAllowedUserIDs:
+		if telegram_user_allowed(user_id):
 			print(user, userRealName, user_id, "is whitelisted for private message")
 		else:
 			print(user, userRealName, user_id, "is not whitelisted. Ignoring.", file=stderr)
@@ -123,10 +159,26 @@ def parseTelegram(inbound):
 	if "text" in msg:
 		message = msg["text"]
 		print("[Telegram]:", user, message)
+		command, prompt, addressed = worker.parse_command(message, botName)
+		if edited and (not addressed or command in CREDITS_COMMANDS):
+			print("[Telegram edit]: not addressed to the bot, ignoring")
+			return
+		if command in CREDITS_COMMANDS and (addressed or chat_type == "private"):
+			replyCredits(chat_id, user_id, message_id)
+			return
+		# Tagging the bot (or sending a bare command) in reply to a picture asks for variations of that picture.
+		# A command with a prompt, like "/dream a red fox", stays a text prompt even when it is a reply.
+		replied_image = imageFileId(msg.get("reply_to_message") or {})
+		if replied_image and addressed and (not prompt or mentions_bot(message, botName)):
+			file_id = replied_image
+			print("[Telegram reply to a picture]:", user, message)
 	elif "photo" in msg:
 		message = msg.get("caption", '')
 		file_id = msg["photo"][-1]["file_id"]
 		print("[Telegram photo]:", user, message)
+		if edited and not worker.parse_command(message, botName)[2]:
+			print("[Telegram edit]: not addressed to the bot, ignoring")
+			return
 	elif "document" in msg:
 		mime_type = msg["document"]["mime_type"]
 		message = msg.get("caption", '')
@@ -135,10 +187,93 @@ def parseTelegram(inbound):
 			return
 		file_id = msg["document"]["file_id"]
 		print("[Telegram document]:", user, mime_type, message)
+		if edited and not worker.parse_command(message, botName)[2]:
+			print("[Telegram edit]: not addressed to the bot, ignoring")
+			return
 	else:
 		print("[telegram]: unhandled message without text/photo/document")
 		return
-	return chat_id, user, userRealName, message, chat_type, message_id, file_id
+	return chat_id, user, userRealName, message, chat_type, message_id, file_id, None, None, None
+
+def originalPrompt(msg):
+	"""Recover the prompt a button's image was made from. The caption shows the prompt actually used
+	(which may be cleaned up and styled), so prefer the user's original message that the image replies to."""
+	original = msg.get("reply_to_message") or {}
+	text = original.get("text") or original.get("caption")
+	if text:
+		command, prompt, addressed = worker.parse_command(text, botName)
+		if addressed and prompt:
+			return prompt
+	# the original message is gone: undo what we added to the caption
+	caption = re.sub(r"\n\nStyle: .*$", "", msg.get("caption") or "", flags=re.S) # captions from older versions
+	for label, cue in STYLES.values():
+		if caption.endswith(", " + cue):
+			return caption[:-len(", " + cue)]
+	return caption
+
+def parseTelegramCallback(query):
+	"""A press of a button under an image. callback_data is '<action>:<command>:<style>'.
+	Every press replaces the image in place. 'g' goes to a style: if we already made that image it is shown
+	straight away from the store (no model calls); otherwise, and for 'r' (Remix), a new one is generated."""
+	if "message" not in query:
+		return
+	data = query.get("data", "")
+	if data == "reload": # buttons on images sent before styles existed
+		data = "r:" + config_telegramBotCommand + ":"
+	parts = data.split(":")
+	if parts[0] == "n": # a button on an image that is still being made
+		telegram.answerCallbackQuery(query["id"], "Still painting, one moment\u2026")
+		return
+	if len(parts) != 3 or parts[0] not in ("g", "r") or parts[1] not in image_models or (parts[2] and parts[2] not in STYLES):
+		return
+	action, command, style = parts
+	msg = query["message"]
+	sender = query["from"]
+	user_id = str(sender["id"])
+	chat_type = msg["chat"]["type"]
+	if chat_type == "private" and not telegram_user_allowed(user_id):
+		print(user_id, "is not whitelisted. Ignoring.", file=stderr)
+		telegram.answerCallbackQuery(query["id"])
+		return
+	chat_id, message_id = str(msg["chat"]["id"]), str(msg["message_id"])
+	record = store.get(chat_id, message_id)
+	label = STYLES[style][0] if style else "original"
+	if record and action == "g":
+		if record["current"] == (style or store.BASE):
+			telegram.answerCallbackQuery(query["id"], f"Already showing the {label} image")
+			return
+		cached = record["images"].get(style or store.BASE)
+		if cached:
+			keyboard = telegram.imageKeyboard(command, style)
+			if telegram.editPhoto(chat_id, message_id, cached["file_id"], cached["caption"], keyboard):
+				telegram.answerCallbackQuery(query["id"], f"Showing the {label} image")
+				store.set_current(chat_id, message_id, style)
+				return
+			# This message can't be edited (Telegram refused). The image is saved, so post it as a new message
+			# and carry the history over, instead of paying for a new image.
+			print("[Telegram button]: could not edit the message; posting the stored image as a new message", file=stderr)
+			sent = telegram.sendPhoto(chat_id, cached["file_id"], cached["caption"], reply_markup=keyboard)
+			if sent and sent["message_id"]:
+				store.carry_over(chat_id, message_id, sent["message_id"], current=style)
+				telegram.answerCallbackQuery(query["id"], f"Posted the {label} image as a new message")
+				return
+			print("[Telegram button]: could not post the stored image either, generating a new one", file=stderr)
+	prompt = record["prompt"] if record else originalPrompt(msg)
+	if not prompt:
+		print("[Telegram button]: could not find the original prompt", file=stderr)
+		telegram.answerCallbackQuery(query["id"], "Sorry, I can't find the original prompt for this image. Please send a new prompt.", alert=True)
+		return
+	telegram.answerCallbackQuery(query["id"], "Remixing..." if action == "r" else f"Painting in the style of {label}..." if style else "Generating...")
+	user = '@' + sender["username"] if "username" in sender else '@' + sender["first_name"]
+	userRealName = sender["first_name"]
+	# reply to the original prompt message if it still exists
+	reply_to = msg.get("reply_to_message", {}).get("message_id")
+	reply_to_id = str(reply_to) if reply_to else None
+	print("[Telegram button]:", user, command, style, prompt, f"(on message {message_id} in a {chat_type} chat {chat_id})")
+	# what to show while this is generated, and what to put back if it fails
+	before = (record["current"] if record else style if action == "r" else "").replace(store.BASE, "")
+	button = {'action': action, 'target': style, 'style': before}
+	return chat_id, user, userRealName, '/' + command + ' ' + prompt, chat_type, reply_to_id, False, style or None, message_id, button
 
 def poll():
 	"""Telegram long polling: no web server, domain or certificate required."""
@@ -153,18 +288,25 @@ def poll():
 			try:
 				parsed = parseTelegram(update)
 				if parsed:
-					chat_id, user, userRealName, message, chat_type, message_id, file_id = parsed
-					startWorker('telegram', chat_id, user, message, botName, userRealName, chat_type, message_id, file_id)
+					chat_id, user, userRealName, message, chat_type, message_id, file_id, style, edit_message_id, button = parsed
+					startWorker('telegram', chat_id, user, message, botName, userRealName, chat_type, message_id, file_id, style, edit_message_id, button)
 			except Exception as e:
 				print("Error handling update:", repr(e), file=stderr)
 
 def main(event):
 	if debug:
 		print(json.dumps(event, indent=4))
-	inbound = event['body']
-	uri = event['uri']
+	inbound = event.get('body')
+	uri = event.get('uri')
+	if not inbound or not uri:
+		# e.g. the Lambda console Test tab: nothing to process, but start-up has registered the webhook
+		print("Ignoring invocation without a request body", file=stderr)
+		return
 	# triage request - the Great Big If
 	file_id=False
+	style=None
+	edit_message_id=None
+	button=None
 	user=''
 	userRealName=''
 
@@ -182,7 +324,7 @@ def main(event):
 		parsed = parseTelegram(inbound)
 		if not parsed:
 			return
-		chat_id, user, userRealName, message, chat_type, message_id, file_id = parsed
+		chat_id, user, userRealName, message, chat_type, message_id, file_id, style, edit_message_id, button = parsed
 	# Slack
 	elif config_slackOutgoingWebhook and uri == urlparse(config_slackOutgoingWebhook).path:
 		service = 'slack'
@@ -219,7 +361,7 @@ def main(event):
 		print("Unknown URI", uri, file=stderr)
 		return
 
-	t = startWorker(service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id)
+	t = startWorker(service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id, style, edit_message_id, button)
 
 	#p = multiprocessing.Process(target=worker.process_request, args=(service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id))
 	#p.start()
@@ -246,7 +388,7 @@ if __name__ == '__main__':
 		print("Running as superuser. This is not recommended.", file=stderr)
 	if not webhook_mode:
 		if not config_telegramBotToken:
-			print("Set telegramBotToken (or a webhook) in dalibot.ini", file=stderr)
+			print("Set TELEGRAM_BOT_TOKEN in the environment", file=stderr)
 			exit(1)
 		try:
 			poll()

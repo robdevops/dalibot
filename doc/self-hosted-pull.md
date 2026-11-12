@@ -35,45 +35,82 @@ pip3 install Pillow
 
 ## Copy the example dalibot config
 ```
-cp dalibot.ini.template dalibot.ini
+cp dalibot.env.template dalibot.env
+```
+```
+chmod 600 dalibot.env
 ```
 
-## Edit dalibot.ini
+## Edit dalibot.env
+Settings are environment variables, one `NAME=value` per line.
 
 ### Mandatory parameters
-  * Set `openai_api_key` to the [key from OpenAI](https://beta.openai.com/account/api-keys)
-  * Set `telegramBotToken` to the token provided by [BotFather](https://core.telegram.org/bots/tutorial)
+  * Set `OPENROUTER_API_KEY` to your [OpenRouter API key](https://openrouter.ai/keys)
+  * Set `TELEGRAM_BOT_TOKEN` to the token provided by [BotFather](https://core.telegram.org/bots/tutorial)
 
 Example:
 ```
-openai_api_key = sk-p999HAfj6Cm1bO00SXgJc7kFxvFPtQ1KBBWrqSOU
-telegramBotToken = 4839574812:AAFD39kkdpWt3ywyRZergyOLMaJhac60qc
+OPENROUTER_API_KEY=sk-or-v1-0123456789abcdef
+TELEGRAM_BOT_TOKEN=4839574812:AAFD39kkdpWt3ywyRZergyOLMaJhac60qc
 ```
 
 ### Optional parameters
 You can make stderr more verbose:
 ```
-debug = 1
+DALIBOT_DEBUG=1
+```
+
+You can choose the model behind the default command (defaults to `openai/gpt-image-2`). The `/gpt`, `/flux` and `/qwen` commands always use their own models:
+```
+OPENROUTER_IMAGE_MODEL=openai/gpt-image-2
+```
+
+You can choose the cheap text model that removes conflicting words from the prompt when a style button is pressed (defaults to `meta-llama/llama-3.1-8b-instruct`):
+```
+OPENROUTER_TEXT_MODEL=meta-llama/llama-3.1-8b-instruct
 ```
 
 You can customise the bot command:
 ```
-telegramBotCommand = dream
+TELEGRAM_BOT_COMMAND=dream
 ```
 
-You can enable downloading of OpenAI images to disk (defaults to `dalibot/var/cache`). Note: user uploads for variations are never saved.
+You can enable saving generated images to disk (defaults to `dalibot/var/cache`). Note: user uploads for variations are never saved.
 ```
-archive = 1
-archive_dir = var/cache
+DALIBOT_ARCHIVE=1
+DALIBOT_ARCHIVE_DIR=var/cache
 ```
 
 You can enable private messaging by listing telegram numeric ids separated by a space:
 ```
-telegramAllowedUserIDs = 123456789 987654321
+TELEGRAM_ALLOWED_USER_IDS="123456789 987654321"
+```
+
+If you have already limited who can reach the bot, for example in BotFather, you can allow everyone who can reach it instead:
+```
+TELEGRAM_ALLOWED_USER_IDS=all
+```
+
+## Image history
+The bot remembers each image message's prompt and the images made for it (as Telegram file ids, not the images themselves), so the buttons under an image can switch between them. It keeps this in a small SQLite file, `var/dalibot.db`, which needs nothing extra to install. The file is created readable by you only, because it contains your prompts, and records older than 90 days are deleted.
+
+You can change these in `dalibot.env`:
+```
+DALIBOT_DB=var/dalibot.db
+DALIBOT_STORE_DAYS=90
 ```
 
 ## Start the bot
-Run `bot.py`. It starts polling Telegram.
+Load the config into the environment and run `bot.py`. It starts polling Telegram.
+```
+cd ~/dalibot
+```
+```
+set -a; . ./dalibot.env; set +a
+```
+```
+./bot.py
+```
 
 
 # Daemonize
@@ -88,6 +125,8 @@ Edit the file to set your path and user to run as:
 ```
 sudo sed -i "s/CHANGEME/${USER}/" /etc/systemd/system/dalibot.service
 ```
+
+The unit loads `~/dalibot/dalibot.env` for you via `EnvironmentFile`.
 
 Reload systemd:
 ```

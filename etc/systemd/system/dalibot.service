@@ -11,6 +11,7 @@ StandardOutput=null
 StandardError=journal
 SyslogIdentifier=dalibot
 Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/home/CHANGEME/dalibot/dalibot.env
 
 [Install]
 WantedBy=multi-user.target
