@@ -134,11 +134,17 @@ TELEGRAM_ALLOWED_USER_IDS="123456789 987654321"
 ### Create the DynamoDB table (for image history)
 The bot remembers each image message's prompt and the images made for it (as Telegram file ids, not the images themselves), so the buttons under an image can switch between them. This needs one small DynamoDB table. Without it the bot still works, but the buttons can't go back to earlier images (the logs say `Store ... failed (continuing without history)`).
 
-In the [DynamoDB console](https://console.aws.amazon.com/dynamodbv2/home) choose _Create table_:
+In the [DynamoDB console](https://console.aws.amazon.com/dynamodbv2/home) choose _Create table_, then work down the page:
   * **Table name:** `dalibot` (or set `DALIBOT_TABLE` to your name)
-  * **Partition key:** `id`, type _String_
+  * **Partition key:** `id`, type _String_. Leave the sort key empty.
+  * **Table settings:** _Customize settings_
   * **Table class:** _DynamoDB Standard_ (the records are tiny, so request costs matter more than storage; Standard-IA would not save anything)
-  * **Table settings:** customise, with capacity mode _On-demand_
+  * **Capacity calculator:** skip it
+  * **Read/write capacity settings:** capacity mode _On-demand_. Leave _Maximum table throughput_ unset, or set a small cap if you want to bound the cost.
+  * **Warm throughput:** _Keep default values_ for both reads and writes
+  * **Secondary indexes** and **Vector indexes:** none
+  * **Encryption at rest:** _AWS-owned key_ (the default, with no extra charge)
+  * Leave any further settings (such as tags) as they are, then choose _Create table_
   * After creating it, open the table's _Additional settings_ and turn on _Time to live_ with the attribute name `ttl`. Old records then delete themselves (after 90 days; change with `DALIBOT_STORE_DAYS`)
 
 Or with the AWS CLI:
