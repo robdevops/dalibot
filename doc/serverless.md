@@ -131,6 +131,11 @@ You can enable private messaging by listing telegram numeric ids separated by a 
 TELEGRAM_ALLOWED_USER_IDS="123456789 987654321"
 ```
 
+If you have already limited who can reach the bot, for example in BotFather, you can allow everyone who can reach it instead:
+```
+TELEGRAM_ALLOWED_USER_IDS=all
+```
+
 ### Create the DynamoDB table (for image history)
 The bot remembers each image message's prompt and the images made for it (as Telegram file ids, not the images themselves), so the buttons under an image can switch between them. This needs one small DynamoDB table. Without it the bot still works, but the buttons can't go back to earlier images (the logs say `Store ... failed (continuing without history)`).
 

@@ -25,7 +25,7 @@ Telegram chat bot for AI image generation, powered by [OpenRouter](https://openr
 | `/qwen` | `qwen/qwen-image-2.1-turbo` | |
 
 * The same commands work in a photo's caption to get variations from that model.
-* `/credits` (also `/tokens`, `/usage` and `/cost`) shows what the bot's OpenRouter API key has spent today, this week and this month, using OpenRouter's own totals. If `TELEGRAM_ALLOWED_USER_IDS` is set, only those users can ask.
+* `/credits` (also `/tokens`, `/usage` and `/cost`) shows what the bot's OpenRouter API key has spent today, this week and this month, using OpenRouter's own totals. If `TELEGRAM_ALLOWED_USER_IDS` lists user ids, only those users can ask.
 * Each generated image has buttons under it. Every button replaces the image in place:
   * 🔄 Remix generates again with the same model, prompt and style.
   * The style buttons (Monet, Dalí, Picasso, 8-bit, EGA, Photo, Watercolour, Hand drawn, Sketch, Lithograph, Rubber stamp, Tattoo, Stencil and Anime) work like tabs. The first press makes the image. Pressing it again later shows that image straight away, without calling a model. ↩ Original goes back to the image before any style.
@@ -33,7 +33,7 @@ Telegram chat bot for AI image generation, powered by [OpenRouter](https://openr
   * While an image is being made, the pressed button shows ⏳ in green and the caption says what is happening. The other buttons just say "still painting" until it's done. If it fails, the previous caption and buttons come back.
   * Image variations do not get buttons.
   * The bot keeps a small record of each image message (the prompt and Telegram file ids, not the images) in SQLite when self-hosted or DynamoDB on Lambda. See the setup guides.
-* The bot only responds in group chats, unless you set `TELEGRAM_ALLOWED_USER_IDS`
+* The bot only responds in group chats, unless you set `TELEGRAM_ALLOWED_USER_IDS` (user ids, or `all`)
 
 # Requirements
 * A Telegram bot token from [BotFather](https://t.me/botfather)
@@ -61,6 +61,7 @@ chmod 600 dalibot.env
 ```
 TELEGRAM_ALLOWED_USER_IDS="123456789 987654321"
 ```
+  If you have already limited who can reach the bot, for example in BotFather, set `TELEGRAM_ALLOWED_USER_IDS=all` to let everyone who can reach it message it privately. Only do this if that restriction really is in place, because the bot then answers (and spends your OpenRouter credits for) anyone who can send it a message.
 * It is recommended to message `/setjoingroups` to BotFather to set your bot group join to `Disabled` after you have added your bot to any desired groups.
 
 ## Secure your endpoint

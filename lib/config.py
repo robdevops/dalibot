@@ -15,7 +15,15 @@ config_archive = _bool('DALIBOT_ARCHIVE')
 config_archive_dir = _str('DALIBOT_ARCHIVE_DIR', 'var/cache').rstrip('/')
 if not config_archive_dir.startswith('/'):
 	config_archive_dir = bot_dir + '/' + config_archive_dir
-config_telegramAllowedUserIDs = _str('TELEGRAM_ALLOWED_USER_IDS', '').split()
+# Numeric Telegram user ids allowed to message the bot privately (and to use /credits), or the word "all" to let
+# everyone who can reach the bot do so, for when access is already limited elsewhere, such as in BotFather.
+_allowed = _str('TELEGRAM_ALLOWED_USER_IDS', '').split()
+config_telegramAllowAll = any(word.lower() == 'all' for word in _allowed)
+config_telegramAllowedUserIDs = [word for word in _allowed if word.lower() != 'all']
+
+def telegram_user_allowed(user_id):
+	"""May this user message the bot privately?"""
+	return config_telegramAllowAll or str(user_id) in config_telegramAllowedUserIDs
 config_telegramBotCommand = _str('TELEGRAM_BOT_COMMAND', 'dream').lstrip('/')
 config_telegramBotToken = _str('TELEGRAM_BOT_TOKEN')
 config_telegramOutgoingToken = _str('TELEGRAM_OUTGOING_TOKEN')

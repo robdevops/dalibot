@@ -106,8 +106,8 @@ def money(amount):
 
 def replyCredits(chat_id, user_id, message_id):
 	"""/credits (also /tokens, /usage, /cost): what OpenRouter says the bot has spent today, this week and this month.
-	If TELEGRAM_ALLOWED_USER_IDS is set, only those users may ask. Without it, anyone who can talk to the bot can."""
-	if config_telegramAllowedUserIDs and user_id not in config_telegramAllowedUserIDs:
+	If TELEGRAM_ALLOWED_USER_IDS lists user ids, only those users may ask. With "all", or no list, anyone who can talk to the bot can."""
+	if not config_telegramAllowAll and config_telegramAllowedUserIDs and user_id not in config_telegramAllowedUserIDs:
 		print(user_id, "is not allowed to see spend. Ignoring.", file=stderr)
 		telegram.sendMessage(chat_id, "Sorry, only approved users can see usage.", message_id)
 		return
@@ -136,7 +136,7 @@ def parseTelegram(inbound):
 	else:
 		user = userRealName = '@' + msg["from"]["first_name"]
 	if chat_type == "private": # Anyone can find and PM the bot so we need to be careful
-		if user_id in config_telegramAllowedUserIDs:
+		if telegram_user_allowed(user_id):
 			print(user, userRealName, user_id, "is whitelisted for private message")
 		else:
 			print(user, userRealName, user_id, "is not whitelisted. Ignoring.", file=stderr)
@@ -201,7 +201,7 @@ def parseTelegramCallback(query):
 	sender = query["from"]
 	user_id = str(sender["id"])
 	chat_type = msg["chat"]["type"]
-	if chat_type == "private" and user_id not in config_telegramAllowedUserIDs:
+	if chat_type == "private" and not telegram_user_allowed(user_id):
 		print(user_id, "is not whitelisted. Ignoring.", file=stderr)
 		telegram.answerCallbackQuery(query["id"])
 		return

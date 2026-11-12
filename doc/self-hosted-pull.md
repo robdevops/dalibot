@@ -86,6 +86,11 @@ You can enable private messaging by listing telegram numeric ids separated by a 
 TELEGRAM_ALLOWED_USER_IDS="123456789 987654321"
 ```
 
+If you have already limited who can reach the bot, for example in BotFather, you can allow everyone who can reach it instead:
+```
+TELEGRAM_ALLOWED_USER_IDS=all
+```
+
 ## Image history
 The bot remembers each image message's prompt and the images made for it (as Telegram file ids, not the images themselves), so the buttons under an image can switch between them. It keeps this in a small SQLite file, `var/dalibot.db`, which needs nothing extra to install. The file is created readable by you only, because it contains your prompts, and records older than 90 days are deleted.
 
