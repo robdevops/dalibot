@@ -116,7 +116,7 @@ You can choose the model behind the default command (defaults to `openai/gpt-ima
 OPENROUTER_IMAGE_MODEL=openai/gpt-image-2
 ```
 
-You can choose the cheap text model that rewrites prompts when a style button is pressed (defaults to `meta-llama/llama-3.1-8b-instruct`):
+You can choose the cheap text model that removes conflicting words from the prompt when a style button is pressed (defaults to `meta-llama/llama-3.1-8b-instruct`):
 ```
 OPENROUTER_TEXT_MODEL=meta-llama/llama-3.1-8b-instruct
 ```

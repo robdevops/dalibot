@@ -6,25 +6,24 @@ URL = 'https://openrouter.ai/api/v1/images'
 CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions'
 
 REMIX_INSTRUCTIONS = (
-	"You rewrite prompts for an AI image generator. You get an ORIGINAL prompt and a TARGET STYLE. "
-	"Rewrite the prompt so it depicts the same subject, scene and details, but in the target style. "
-	"Remove or replace any wording in the original that conflicts with the target style, such as photographic or realism terms, "
-	"camera and lens details, other art styles or mediums, and resolution keywords like 4k. "
-	"Write one paragraph of under 70 words that ends with the style cues. "
-	"Reply with only the rewritten prompt, with no quotes or commentary."
+	"You edit prompts for an AI image generator. A style phrase will be appended to the prompt afterwards. "
+	"Remove only the words and phrases in the prompt that describe a conflicting style, medium or rendering, "
+	"for example 'photorealistic', 'oil painting', 'cartoon', 'pixel art', '4k', or camera and lens details. "
+	"Do not add anything. Do not rephrase, reorder or embellish the remaining words. "
+	"If nothing conflicts, return the prompt unchanged. Reply with only the edited prompt."
 )
 
-def remix(prompt, style_label, style_cues):
-	"""Have a cheap text model rewrite a prompt for a style, dropping conflicting terms.
-	Returns the new prompt, or None if anything goes wrong (the caller then falls back to appending the style)."""
+def remix(prompt, style_cue):
+	"""Have a cheap text model strip words from a prompt that fight the style that is about to be added.
+	Returns the cleaned prompt, or None if anything goes wrong or the model embellishes (the caller then keeps the original)."""
 	body = {
 		'model': config_openrouter_text_model,
 		'messages': [
 			{'role': 'system', 'content': REMIX_INSTRUCTIONS},
-			{'role': 'user', 'content': f"ORIGINAL: {prompt}\nTARGET STYLE: {style_label}: {style_cues}"},
+			{'role': 'user', 'content': f"STYLE TO BE ADDED: {style_cue}\nPROMPT: {prompt}"},
 		],
 		'max_tokens': 200,
-		'temperature': 0.7,
+		'temperature': 0,
 	}
 	req = urllib.request.Request(CHAT_URL, data=json.dumps(body).encode(), method='POST')
 	req.add_header('Content-Type', 'application/json')
@@ -35,9 +34,13 @@ def remix(prompt, style_label, style_cues):
 	except Exception as e:
 		if isinstance(e, urllib.error.HTTPError):
 			e.close()
-		print("Prompt remix failed, using the plain prompt:", repr(e), file=stderr)
+		print("Prompt cleanup failed, using the original prompt:", repr(e), file=stderr)
 		return None
-	return text[:900] or None
+	if not text or len(text) > len(prompt):
+		# an edit that only removes words can never be longer than the original
+		print("Prompt cleanup returned an unusable edit, using the original prompt:", repr(text), file=stderr)
+		return None
+	return text
 
 def generate(prompt, model=None):
 	"""Text to image. Returns (True, image_bytes) or (False, error message)."""
