@@ -3,6 +3,41 @@ from sys import stderr
 from lib.config import *
 
 URL = 'https://openrouter.ai/api/v1/images'
+CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions'
+
+REMIX_INSTRUCTIONS = (
+	"You rewrite prompts for an AI image generator. You get an ORIGINAL prompt and a TARGET STYLE. "
+	"Rewrite the prompt so it depicts the same subject, scene and details, but in the target style. "
+	"Remove or replace any wording in the original that conflicts with the target style, such as photographic or realism terms, "
+	"camera and lens details, other art styles or mediums, and resolution keywords like 4k. "
+	"Write one paragraph of under 70 words that ends with the style cues. "
+	"Reply with only the rewritten prompt, with no quotes or commentary."
+)
+
+def remix(prompt, style_label, style_cues):
+	"""Have a cheap text model rewrite a prompt for a style, dropping conflicting terms.
+	Returns the new prompt, or None if anything goes wrong (the caller then falls back to appending the style)."""
+	body = {
+		'model': config_openrouter_text_model,
+		'messages': [
+			{'role': 'system', 'content': REMIX_INSTRUCTIONS},
+			{'role': 'user', 'content': f"ORIGINAL: {prompt}\nTARGET STYLE: {style_label}: {style_cues}"},
+		],
+		'max_tokens': 200,
+		'temperature': 0.7,
+	}
+	req = urllib.request.Request(CHAT_URL, data=json.dumps(body).encode(), method='POST')
+	req.add_header('Content-Type', 'application/json')
+	req.add_header('Authorization', 'Bearer ' + (config_openrouter_api_key or ''))
+	try:
+		with urllib.request.urlopen(req, timeout=20) as r:
+			text = json.load(r)['choices'][0]['message']['content'].strip().strip('"').strip()
+	except Exception as e:
+		if isinstance(e, urllib.error.HTTPError):
+			e.close()
+		print("Prompt remix failed, using the plain prompt:", repr(e), file=stderr)
+		return None
+	return text[:900] or None
 
 def generate(prompt, model=None):
 	"""Text to image. Returns (True, image_bytes) or (False, error message)."""

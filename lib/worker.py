@@ -107,7 +107,11 @@ def _process_request(typing, service, chat_id, user, message, botName, userRealN
 			if len(message.split()) > 2:
 				typing.start()
 				print("Sending prompt to OpenRouter:", model, style or "")
-				styled = message + ', ' + STYLES[style][1] if style in STYLES else message
+				styled = message
+				if style in STYLES:
+					# a cheap text model rewrites the prompt for the style, dropping terms that fight it
+					styled = openrouter.remix(message, STYLES[style][0], STYLES[style][1]) or message + ', ' + STYLES[style][1]
+					print("Remixed prompt:", styled)
 				success, image_url = openrouter.generate(styled, model)
 				if success:
 					print("Sending result to Telegram")

@@ -31,6 +31,7 @@ image_models = {
 	'qwen': ('qwen/qwen-image-2.1-turbo', 'Qwen Image 2.1 Turbo'),
 }
 image_models[config_telegramBotCommand] = (config_openrouter_image_model, 'the default model')
+config_openrouter_text_model = _str('OPENROUTER_TEXT_MODEL', 'meta-llama/llama-3.1-8b-instruct') # cheap model that rewrites prompts for styles
 config_image_timeout = int(_str('DALIBOT_IMAGE_TIMEOUT', 120))
 config_slackOAuthToken = _str('SLACK_OAUTH_TOKEN')
 config_slackOutgoingToken = _str('SLACK_OUTGOING_TOKEN')
