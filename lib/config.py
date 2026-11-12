@@ -31,6 +31,7 @@ image_models = {
 	'qwen': ('qwen/qwen-image-2.1-turbo', 'Qwen Image 2.1 Turbo'),
 }
 image_models[config_telegramBotCommand] = (config_openrouter_image_model, 'the default model')
+CREDITS_COMMANDS = ('credits', 'tokens', 'usage', 'cost') # show what the bot has spent on OpenRouter
 config_openrouter_text_model = _str('OPENROUTER_TEXT_MODEL', 'meta-llama/llama-3.1-8b-instruct') # cheap model that rewrites prompts for styles
 MIN_PROMPT_WORDS = 3 # shorter typed prompts are ignored; shorter prompts on a button press are expanded by the text model
 config_image_timeout = int(_str('DALIBOT_IMAGE_TIMEOUT', 120))

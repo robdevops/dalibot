@@ -25,6 +25,7 @@ Telegram chat bot for AI image generation, powered by [OpenRouter](https://openr
 | `/qwen` | `qwen/qwen-image-2.1-turbo` | |
 
 * The same commands work in a photo's caption to get variations from that model.
+* `/credits` (also `/tokens`, `/usage` and `/cost`) shows what the bot's OpenRouter API key has spent today, this week and this month, using OpenRouter's own totals. If `TELEGRAM_ALLOWED_USER_IDS` is set, only those users can ask.
 * Each generated image has buttons under it. Every button replaces the image in place:
   * 🔄 Remix generates again with the same model, prompt and style.
   * The style buttons (Monet, Dalí, Picasso, 8-bit, EGA, Photo, Watercolour, Hand drawn, Sketch, Lithograph, Rubber stamp, Tattoo, Stencil and Anime) work like tabs. The first press makes the image. Pressing it again later shows that image straight away, without calling a model. ↩ Original goes back to the image before any style.

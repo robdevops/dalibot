@@ -27,6 +27,7 @@ from sys import stderr
 from urllib.parse import urlparse
 
 import lib.worker as worker
+import lib.openrouter as openrouter
 import lib.store as store
 from lib.styles import STYLES
 if config_telegramBotToken:
@@ -100,6 +101,22 @@ def startWorker(service, chat_id, user, message, botName, userRealName, chat_typ
 	t.start()
 	return t
 
+def money(amount):
+	return f'${amount:,.4f}' if amount < 1 else f'${amount:,.2f}'
+
+def replyCredits(chat_id, user_id, message_id):
+	"""/credits (also /tokens, /usage, /cost): what OpenRouter says the bot has spent today, this week and this month.
+	If TELEGRAM_ALLOWED_USER_IDS is set, only those users may ask. Without it, anyone who can talk to the bot can."""
+	if config_telegramAllowedUserIDs and user_id not in config_telegramAllowedUserIDs:
+		print(user_id, "is not allowed to see spend. Ignoring.", file=stderr)
+		telegram.sendMessage(chat_id, "Sorry, only approved users can see usage.", message_id)
+		return
+	ok, spent = openrouter.spend()
+	if not ok:
+		telegram.sendMessage(chat_id, "Couldn't get usage from OpenRouter: " + spent, message_id)
+		return
+	telegram.sendMessage(chat_id, "OpenRouter spend\ntoday: " + money(spent['today']) + "\nweek: " + money(spent['week']) + "\nmonth: " + money(spent['month']), message_id)
+
 def parseTelegram(inbound):
 	"""Extract what the worker needs from a Telegram update. Returns None if it should be ignored."""
 	file_id = False
@@ -127,6 +144,10 @@ def parseTelegram(inbound):
 	if "text" in msg:
 		message = msg["text"]
 		print("[Telegram]:", user, message)
+		command, prompt, addressed = worker.parse_command(message, botName)
+		if command in CREDITS_COMMANDS and (addressed or chat_type == "private"):
+			replyCredits(chat_id, user_id, message_id)
+			return
 	elif "photo" in msg:
 		message = msg.get("caption", '')
 		file_id = msg["photo"][-1]["file_id"]

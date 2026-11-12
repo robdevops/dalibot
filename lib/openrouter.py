@@ -184,3 +184,24 @@ def _request(body, model=None):
 		error = "Unexpected response from OpenRouter: " + repr(e)
 		print(error, file=stderr)
 		return False, error
+
+KEY_URL = 'https://openrouter.ai/api/v1/key'
+
+def spend():
+	"""What OpenRouter says this API key has spent, in USD: {'today', 'week', 'month'}.
+	These are OpenRouter's own daily, weekly and monthly totals. Returns (True, totals) or (False, error message)."""
+	req = urllib.request.Request(KEY_URL)
+	req.add_header('Authorization', 'Bearer ' + (config_openrouter_api_key or ''))
+	try:
+		with urllib.request.urlopen(req, timeout=config_http_timeout) as r:
+			data = json.load(r)['data']
+		return True, {'today': float(data['usage_daily']), 'week': float(data['usage_weekly']), 'month': float(data['usage_monthly'])}
+	except urllib.error.HTTPError as e:
+		e.close()
+		error = f"OpenRouter error {e.code}"
+	except (urllib.error.URLError, socket.timeout) as e:
+		error = "OpenRouter connection error: " + str(e)
+	except (KeyError, TypeError, ValueError) as e:
+		error = "Unexpected response from OpenRouter: " + repr(e)
+	print(error, file=stderr)
+	return False, error

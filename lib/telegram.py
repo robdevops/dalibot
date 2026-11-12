@@ -290,6 +290,7 @@ def setMyCommands():
 	for name, (model, description) in image_models.items():
 		if name != config_telegramBotCommand:
 			commands.append({'command': name, 'description': 'same, using ' + description})
+	commands.append({'command': CREDITS_COMMANDS[0], 'description': 'show what has been spent on OpenRouter: today, week, month'})
 	data = {'commands': commands}
 	data = json.dumps(data).encode('utf-8')
 	req = urllib.request.Request(url, data, headers, method='POST')

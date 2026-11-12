@@ -19,7 +19,7 @@ def parse_command(message, botName):
 	'/flux a cat' -> ('flux', 'a cat', True); '@bot a cat' -> (default command, 'a cat', True)."""
 	text = message.strip()
 	m = re.match(r'^/(\w+)(@\w+)?\s*(.*)$', text, re.S)
-	if m and m.group(1).lower() in image_models:
+	if m and (m.group(1).lower() in image_models or m.group(1).lower() in CREDITS_COMMANDS):
 		if m.group(2) and botName and m.group(2).lower() != botName.lower():
 			return config_telegramBotCommand, text, False # addressed to a different bot
 		return m.group(1).lower(), m.group(3).strip(), True
