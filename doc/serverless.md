@@ -131,6 +131,38 @@ You can enable private messaging by listing telegram numeric ids separated by a 
 TELEGRAM_ALLOWED_USER_IDS="123456789 987654321"
 ```
 
+### Create the DynamoDB table (for image history)
+The bot remembers each image message's prompt and the images made for it (as Telegram file ids, not the images themselves), so the buttons under an image can switch between them. This needs one small DynamoDB table. Without it the bot still works, but the buttons can't go back to earlier images (the logs say `Store ... failed (continuing without history)`).
+
+In the [DynamoDB console](https://console.aws.amazon.com/dynamodbv2/home) choose _Create table_:
+  * **Table name:** `dalibot` (or set `DALIBOT_TABLE` to your name)
+  * **Partition key:** `id`, type _String_
+  * **Table settings:** customise, with capacity mode _On-demand_
+  * After creating it, open the table's _Additional settings_ and turn on _Time to live_ with the attribute name `ttl`. Old records then delete themselves (after 90 days; change with `DALIBOT_STORE_DAYS`)
+
+Or with the AWS CLI:
+```
+aws dynamodb create-table --table-name dalibot --attribute-definitions AttributeName=id,AttributeType=S --key-schema AttributeName=id,KeyType=HASH --billing-mode PAY_PER_REQUEST
+```
+```
+aws dynamodb update-time-to-live --table-name dalibot --time-to-live-specification Enabled=true,AttributeName=ttl
+```
+
+Then let the function use it. In the Lambda function go to _Configuration > Permissions_, open the execution role, and add an inline policy (replace the region and account number):
+```
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"],
+            "Resource": "arn:aws:dynamodb:us-east-2:123456789012:table/dalibot"
+        }
+    ]
+}
+```
+Lambda's Python runtime already includes the AWS library (`boto3`), so nothing needs adding to the package.
+
 ### Register the webhook with Telegram
 The bot registers your webhook with Telegram when the function starts, which happens on its first invocation. Go to the _Test_ tab in the Lambda function and run any test event. The test itself is ignored (it has no Telegram message), but the logs should show:
 ```

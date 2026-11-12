@@ -133,6 +133,7 @@ __pycache__/
 todo.txt
 script.zip
 var/cache/*
+var/*.db
 .env
 *.conf
 *.ini

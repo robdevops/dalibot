@@ -10,6 +10,7 @@ import urllib.request, socket
 from lib.config import *
 import lib.telegram as telegram
 import lib.openrouter as openrouter
+import lib.store as store
 from lib.multipart import image_type
 from lib.styles import STYLES, with_style
 
@@ -122,14 +123,22 @@ def _process_request(typing, service, chat_id, user, message, botName, userRealN
 				if success:
 					print("Sending result to Telegram")
 					caption = styled # show the prompt that was actually used
-					keyboard = telegram.imageKeyboard(command, style if style in STYLES else '')
-					# Remix replaces the image in place; if that fails, post a new one instead
+					style_key = style if style in STYLES else ''
+					keyboard = telegram.imageKeyboard(command, style_key)
+					# Button presses replace the image in place; if that fails, post a new one instead
+					sent = False
 					if edit_message_id:
-						print("Remix: replacing message", edit_message_id, "in place;", len(image_url) if isinstance(image_url, bytes) else "url", "bytes" if isinstance(image_url, bytes) else "")
-					if not (edit_message_id and telegram.editPhoto(chat_id, edit_message_id, image_url, caption, keyboard)):
-						if edit_message_id:
-							print("Remix: in-place edit failed, posting a new image instead", file=stderr)
-						telegram.sendPhoto(chat_id, image_url, caption, message_id, reply_markup=keyboard)
+						print("Replacing message", edit_message_id, "in place;", len(image_url), "bytes" if isinstance(image_url, bytes) else "(url)")
+						sent = telegram.editPhoto(chat_id, edit_message_id, image_url, caption, keyboard)
+						if sent:
+							sent['message_id'] = edit_message_id
+						else:
+							print("In-place edit failed, posting a new image instead", file=stderr)
+					if not sent:
+						sent = telegram.sendPhoto(chat_id, image_url, caption, message_id, reply_markup=keyboard)
+					if sent and sent['message_id'] and sent['file_id']:
+						# remember the image (by Telegram file_id) so the buttons can switch back to it
+						store.save_image(chat_id, sent['message_id'], prompt, command, style_key, sent['file_id'], caption)
 					if config_archive:
 						image_bytesio = download_file(image_url)
 						filename = config_archive_dir + '/image_' + str(now) + '.' + image_type(image_url)[0]

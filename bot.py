@@ -27,6 +27,7 @@ from sys import stderr
 from urllib.parse import urlparse
 
 import lib.worker as worker
+import lib.store as store
 from lib.styles import STYLES
 if config_telegramBotToken:
 	import lib.telegram as telegram
@@ -160,8 +161,9 @@ def originalPrompt(msg):
 	return caption
 
 def parseTelegramCallback(query):
-	"""A press of a button under an image: generate again with a model and style.
-	callback_data is '<action>:<command>:<style>': 'r' (Remix) replaces the image in place, 'g' posts a new image."""
+	"""A press of a button under an image. callback_data is '<action>:<command>:<style>'.
+	Every press replaces the image in place. 'g' goes to a style: if we already made that image it is shown
+	straight away from the store (no model calls); otherwise, and for 'r' (Remix), a new one is generated."""
 	if "message" not in query:
 		return
 	data = query.get("data", "")
@@ -179,19 +181,33 @@ def parseTelegramCallback(query):
 		print(user_id, "is not whitelisted. Ignoring.", file=stderr)
 		telegram.answerCallbackQuery(query["id"])
 		return
-	prompt = originalPrompt(msg)
+	chat_id, message_id = str(msg["chat"]["id"]), str(msg["message_id"])
+	record = store.get(chat_id, message_id)
+	label = STYLES[style][0] if style else "original"
+	if record and action == "g":
+		if record["current"] == (style or store.BASE):
+			telegram.answerCallbackQuery(query["id"], f"Already showing the {label} image")
+			return
+		cached = record["images"].get(style or store.BASE)
+		if cached:
+			if telegram.editPhoto(chat_id, message_id, cached["file_id"], cached["caption"], telegram.imageKeyboard(command, style)):
+				telegram.answerCallbackQuery(query["id"], f"Showing the {label} image")
+				store.set_current(chat_id, message_id, style)
+				return
+			print("[Telegram button]: could not show the stored image, generating a new one", file=stderr)
+	prompt = record["prompt"] if record else originalPrompt(msg)
 	if not prompt:
 		print("[Telegram button]: could not find the original prompt", file=stderr)
 		telegram.answerCallbackQuery(query["id"], "Sorry, I can't find the original prompt for this image. Please send a new prompt.", alert=True)
 		return
-	telegram.answerCallbackQuery(query["id"], "Remixing..." if not style else "Painting in the style of " + STYLES[style][0] + "...")
+	telegram.answerCallbackQuery(query["id"], "Remixing..." if action == "r" else f"Painting in the style of {label}..." if style else "Generating...")
 	user = '@' + sender["username"] if "username" in sender else '@' + sender["first_name"]
 	userRealName = sender["first_name"]
 	# reply to the original prompt message if it still exists
 	reply_to = msg.get("reply_to_message", {}).get("message_id")
-	message_id = str(reply_to) if reply_to else None
+	reply_to_id = str(reply_to) if reply_to else None
 	print("[Telegram button]:", user, command, style, prompt)
-	return str(msg["chat"]["id"]), user, userRealName, '/' + command + ' ' + prompt, chat_type, message_id, False, style or None, str(msg["message_id"]) if action == "r" else None
+	return chat_id, user, userRealName, '/' + command + ' ' + prompt, chat_type, reply_to_id, False, style or None, message_id
 
 def poll():
 	"""Telegram long polling: no web server, domain or certificate required."""

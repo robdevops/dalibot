@@ -34,6 +34,15 @@ image_models[config_telegramBotCommand] = (config_openrouter_image_model, 'the d
 config_openrouter_text_model = _str('OPENROUTER_TEXT_MODEL', 'meta-llama/llama-3.1-8b-instruct') # cheap model that rewrites prompts for styles
 MIN_PROMPT_WORDS = 3 # shorter typed prompts are ignored; shorter prompts on a button press are expanded by the text model
 config_image_timeout = int(_str('DALIBOT_IMAGE_TIMEOUT', 120))
+
+# Where we remember each image message's prompt and the images made for it (as Telegram file_ids), so the
+# buttons can switch between them. sqlite for self-hosted, dynamodb on Lambda. See lib/store.py.
+config_store = _str('DALIBOT_STORE', 'dynamodb' if os.environ.get('AWS_LAMBDA_FUNCTION_NAME') else 'sqlite').lower()
+config_store_days = int(_str('DALIBOT_STORE_DAYS', 90)) # forget messages after this long
+config_store_db = _str('DALIBOT_DB', 'var/dalibot.db')
+if not config_store_db.startswith('/'):
+	config_store_db = bot_dir + '/' + config_store_db
+config_store_table = _str('DALIBOT_TABLE', 'dalibot')
 config_slackOAuthToken = _str('SLACK_OAUTH_TOKEN')
 config_slackOutgoingToken = _str('SLACK_OUTGOING_TOKEN')
 config_slackOutgoingWebhook = _str('SLACK_OUTGOING_WEBHOOK')

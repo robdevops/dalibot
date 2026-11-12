@@ -25,7 +25,12 @@ Telegram chat bot for AI image generation, powered by [OpenRouter](https://openr
 | `/qwen` | `qwen/qwen-image-2.1-turbo` | |
 
 * The same commands work in a photo's caption to get variations from that model.
-* Each generated image has buttons under it: 🔄 Remix generates again with the same model and prompt, replacing the image in place, and Monet, Dalí, Picasso, 8-bit, EGA, Photo, Watercolour, Hand drawn, Sketch, Lithograph, Rubber stamp, Tattoo and Stencil regenerate it in that style. A cheap text model first removes words that fight the style, so a "photorealistic" prompt loses that word when you press Picasso, then a short phrase such as "in the style of Pablo Picasso" is added. (Image variations do not get buttons.)
+* Each generated image has buttons under it. Every button replaces the image in place:
+  * 🔄 Remix generates again with the same model, prompt and style.
+  * The style buttons (Monet, Dalí, Picasso, 8-bit, EGA, Photo, Watercolour, Hand drawn, Sketch, Lithograph, Rubber stamp, Tattoo and Stencil) work like tabs. The first press makes the image. Pressing it again later shows that image straight away, without calling a model. ↩ Original goes back to the image before any style.
+  * Before a style is applied, a cheap text model removes words that fight it, so a "photorealistic" prompt loses that word when you press Picasso. Then a short phrase such as "in the style of Pablo Picasso" is added.
+  * Image variations do not get buttons.
+  * The bot keeps a small record of each image message (the prompt and Telegram file ids, not the images) in SQLite when self-hosted or DynamoDB on Lambda. See the setup guides.
 * The bot only responds in group chats, unless you set `TELEGRAM_ALLOWED_USER_IDS`
 
 # Requirements
