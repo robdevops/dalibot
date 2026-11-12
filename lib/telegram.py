@@ -91,7 +91,8 @@ def imageKeyboard(command, style=''):
 		return {'text': text, 'callback_data': f'g:{command}:{style_key}'}
 	# tick the style this image was made with
 	styles = [button(('\u2713 ' if key == style else '') + label, key) for key, (label, _) in STYLES.items()]
-	return {'inline_keyboard': [[button('\U0001F504 Reload', style)], styles[:3], styles[3:]]}
+	rows = [styles[i:i + 3] for i in range(0, len(styles), 3)]
+	return {'inline_keyboard': [[button('\U0001F504 Reload', style)]] + rows}
 
 def sendPhoto(chat_id, photo_url, caption, message_id=None, reply_markup=None):
 	url = webhooks['telegram'] + "sendPhoto?chat_id=" + str(chat_id)
