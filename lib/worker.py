@@ -195,6 +195,9 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 					if not sent:
 						sent = telegram.sendPhoto(chat_id, image_url, caption, message_id, reply_markup=keyboard)
 					if sent and sent['message_id'] and sent['file_id']:
+						if edit_message_id and sent['message_id'] != edit_message_id:
+							# the old message couldn't be edited, so this is a new one: bring its earlier images along
+							store.carry_over(chat_id, edit_message_id, sent['message_id'])
 						# remember the image (by Telegram file_id) so the buttons can switch back to it
 						store.save_image(chat_id, sent['message_id'], prompt, command, style_key, sent['file_id'], caption, base)
 					if config_archive:

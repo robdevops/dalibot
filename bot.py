@@ -230,11 +230,20 @@ def parseTelegramCallback(query):
 			return
 		cached = record["images"].get(style or store.BASE)
 		if cached:
-			if telegram.editPhoto(chat_id, message_id, cached["file_id"], cached["caption"], telegram.imageKeyboard(command, style)):
+			keyboard = telegram.imageKeyboard(command, style)
+			if telegram.editPhoto(chat_id, message_id, cached["file_id"], cached["caption"], keyboard):
 				telegram.answerCallbackQuery(query["id"], f"Showing the {label} image")
 				store.set_current(chat_id, message_id, style)
 				return
-			print("[Telegram button]: could not show the stored image, generating a new one", file=stderr)
+			# This message can't be edited (Telegram refused). The image is saved, so post it as a new message
+			# and carry the history over, instead of paying for a new image.
+			print("[Telegram button]: could not edit the message; posting the stored image as a new message", file=stderr)
+			sent = telegram.sendPhoto(chat_id, cached["file_id"], cached["caption"], reply_markup=keyboard)
+			if sent and sent["message_id"]:
+				store.carry_over(chat_id, message_id, sent["message_id"], current=style)
+				telegram.answerCallbackQuery(query["id"], f"Posted the {label} image as a new message")
+				return
+			print("[Telegram button]: could not post the stored image either, generating a new one", file=stderr)
 	prompt = record["prompt"] if record else originalPrompt(msg)
 	if not prompt:
 		print("[Telegram button]: could not find the original prompt", file=stderr)

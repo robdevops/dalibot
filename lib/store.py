@@ -80,6 +80,9 @@ class SqliteStore:
 			return record
 		self._modify(chat_id, message_id, change)
 
+	def put(self, chat_id, message_id, record):
+		self._modify(chat_id, message_id, lambda _: record)
+
 	def describe(self):
 		db = self._connect()
 		try:
@@ -117,6 +120,10 @@ class DynamoStore:
 			UpdateExpression='SET images.#k = :image, #cur = :k, #ttl = :ttl',
 			ExpressionAttributeNames={'#k': key(style), '#cur': 'current', '#ttl': 'ttl'},
 			ExpressionAttributeValues={':image': {'file_id': file_id, 'caption': caption, 'base': base}, ':k': key(style), ':ttl': expires})
+
+	def put(self, chat_id, message_id, record):
+		self.table.put_item(Item={'id': self._id(chat_id, message_id), 'prompt': record['prompt'], 'command': record['command'],
+			'current': record['current'], 'images': record['images'], 'ttl': int(time.time()) + self.days * 86400})
 
 	def describe(self):
 		self.get('check', 'check') # a read, which fails if the table, region or permissions are wrong
@@ -163,3 +170,13 @@ def save_image(chat_id, message_id, prompt, command, style, file_id, caption, ba
 
 def set_current(chat_id, message_id, style):
 	return _safely('set_current', None, chat_id, message_id, style)
+
+def carry_over(chat_id, old_message_id, new_message_id, current=None):
+	"""Copy a message's saved images to another message, for when the old one can't be edited and a new one is posted.
+	current is the style the new message shows (the old record's current style if not given). Returns True if copied."""
+	record = get(chat_id, old_message_id)
+	if not record:
+		return False
+	if current is not None:
+		record['current'] = key(current)
+	return _safely('put', False, chat_id, new_message_id, record) is not False
