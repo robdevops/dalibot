@@ -147,7 +147,7 @@ def generate(prompt, model=None):
 # different. Four requests, four directions: together they come out clearly unlike the original and each other.
 VARIATION_TWISTS = [
 	"show it from a different viewpoint with a different composition (for example from above, from the side, much closer or much further away)",
-	"reinterpret it with a different mood and a different artistic treatment",
+	"reinterpret it in a different style and with a different mood",
 	"show it from a different viewpoint with a different composition, and reinterpret it with a different mood and artistic treatment",
 	"change what the subject is doing: give it a different pose, expression or action",
 ]
