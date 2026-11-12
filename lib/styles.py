@@ -15,6 +15,12 @@ STYLES = {
 	'stencil':     ('Stencil', 'as stencil art'),
 	'anime':       ('Anime', 'as anime art'),
 	'vangogh':     ('Van Gogh', 'in the style of Vincent van Gogh'),
+	'oilpainting': ('Oil painting', 'as an oil painting'),
+	'cartoon':     ('Cartoon', 'as a cartoon'),
+	'comicbook':   ('Comic book', 'as a comic book illustration'),
+	'render3d':    ('3D render', 'as a 3D render'),
+	'popart':      ('Pop art', 'as pop art'),
+	'cyberpunk':   ('Cyberpunk', 'as cyberpunk art'),
 }
 
 import unicodedata
