@@ -15,15 +15,27 @@ STYLES = {
 	'stencil':     ('Stencil', 'as stencil art'),
 }
 
-# The button text must appear in the prompt (case-insensitive substring: "Photo" is in "as a photograph"),
+import unicodedata
+
+def fold(text):
+	"""Lower-case and strip accents, so 'Dalí' matches 'Dali' and 'Photo' matches 'PHOTOGRAPH'."""
+	return ''.join(c for c in unicodedata.normalize('NFKD', text) if not unicodedata.combining(c)).casefold()
+
+def contains_label(text, label):
+	return fold(label) in fold(text)
+
+# The button text must appear in the prompt (a substring: "Photo" is in "as a photograph"),
 # so what you press is what the model is told. Fail at start-up if an edit breaks that.
 for _key, (_label, _cue) in STYLES.items():
-	assert _label.lower() in _cue.lower(), f"style {_key!r}: button text {_label!r} is not in its phrase {_cue!r}"
+	assert contains_label(_cue, _label), f"style {_key!r}: button text {_label!r} is not in its phrase {_cue!r}"
 
-def with_style(prompt, style):
-	"""prompt + the style phrase, guaranteed to contain the button text."""
+def with_style(prompt, style, fix=None):
+	"""prompt + the style phrase, checked to contain the button text.
+	If it doesn't, fix(prompt, label) (a model) gets one chance to repair it, and as a last resort we append the label."""
 	label, cue = STYLES[style]
 	styled = prompt + ', ' + cue
-	if label.lower() not in styled.lower():
+	if not contains_label(styled, label) and fix:
+		styled = fix(styled, label) or styled
+	if not contains_label(styled, label):
 		styled += ', ' + label
 	return styled

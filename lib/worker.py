@@ -116,7 +116,7 @@ def _process_request(typing, service, chat_id, user, message, botName, userRealN
 				if style in STYLES:
 					# a cheap text model removes words that fight the style; we then append a short style phrase
 					cue = STYLES[style][1]
-					styled = with_style(openrouter.remix(message, cue) or message, style)
+					styled = with_style(openrouter.remix(message, cue) or message, style, fix=openrouter.fix_style)
 					print("Styled prompt:", styled)
 				success, image_url = openrouter.generate(styled, model)
 				if success:

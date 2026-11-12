@@ -52,6 +52,37 @@ def only_removes_few_words(original, edited):
 	remaining = iter(a)
 	return all(word in remaining for word in b) # each edited word must appear in order in the original
 
+FIX_INSTRUCTIONS = (
+	"You fix prompts for an AI image generator. The prompt must clearly mention the style '{label}'. "
+	"Rewrite it so it includes that word or a form of it (for example 'photograph' for 'Photo'), "
+	"changing as little else as possible. Reply with only the fixed prompt."
+)
+
+def fix_style(prompt, label):
+	"""Ask the cheap text model to work the style named by a button into a prompt that lacks it.
+	Returns the fixed prompt, or None if anything goes wrong (the caller then appends the label itself)."""
+	body = {
+		'model': config_openrouter_text_model,
+		'messages': [
+			{'role': 'system', 'content': FIX_INSTRUCTIONS.format(label=label)},
+			{'role': 'user', 'content': prompt},
+		],
+		'max_tokens': 200,
+		'temperature': 0,
+	}
+	req = urllib.request.Request(CHAT_URL, data=json.dumps(body).encode(), method='POST')
+	req.add_header('Content-Type', 'application/json')
+	req.add_header('Authorization', 'Bearer ' + (config_openrouter_api_key or ''))
+	try:
+		with urllib.request.urlopen(req, timeout=20) as r:
+			text = json.load(r)['choices'][0]['message']['content'].strip().strip('"').strip()
+	except Exception as e:
+		if isinstance(e, urllib.error.HTTPError):
+			e.close()
+		print("Style fix failed:", repr(e), file=stderr)
+		return None
+	return text if text and len(text) <= 2 * len(prompt) + 60 else None
+
 EXPAND_INSTRUCTIONS = (
 	"You expand very short prompts for an AI image generator. Add a few concrete details about the setting, "
 	"lighting or composition so the prompt has at least {min_words} words, and keep the original subject. "
