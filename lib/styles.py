@@ -14,6 +14,7 @@ STYLES = {
 	'tattoo':      ('Tattoo', 'as a tattoo design'),
 	'stencil':     ('Stencil', 'as stencil art'),
 	'anime':       ('Anime', 'as anime art'),
+	'vangogh':     ('Van Gogh', 'in the style of Vincent van Gogh'),
 }
 
 import unicodedata
