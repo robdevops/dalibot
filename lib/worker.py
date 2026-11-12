@@ -132,11 +132,11 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 			success, image_url = result[0], result[1]
 			if success:
 				print("Sending result to Telegram")
-				message = variation_caption(message, result[2], cropped)
+				captions = variation_captions(message, result[2], cropped)
 				if isinstance(image_url, list):
-					telegram.sendMediaGroup(chat_id, image_url, message, message_id) # one album, so the chat isn't flooded
+					telegram.sendMediaGroup(chat_id, image_url, captions, message_id) # one album, so the chat isn't flooded
 				else:
-					telegram.sendPhoto(chat_id, image_url, message, message_id)
+					telegram.sendPhoto(chat_id, image_url, captions[0], message_id)
 				if config_archive:
 					if isinstance(image_url, list):
 						for idx, url in enumerate(image_url):
@@ -216,18 +216,18 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 				print("Prompt was too short - ignoring")
 	return
 
-def variation_caption(message, looks, cropped):
-	"""The caption under a set of variations: what the user asked for, the style and viewpoint of each picture (numbered in
-	the order the pictures appear), and a note if we cropped the photo. Telegram allows 1024 characters."""
-	lines = [message] if message else []
-	if len(looks) == 1:
-		lines.append(f"{looks[0][0]}, {looks[0][1]}")
-	else:
-		lines += [f"{i}. {style}, {viewpoint}" for i, (style, viewpoint) in enumerate(looks, 1)]
-	if cropped:
-		lines.append("Note: I centre-cropped your non-square image before sending it to the image model")
-	caption = "\n".join(lines)
-	return caption if len(caption) <= 1024 else caption[:1021] + "..."
+def variation_captions(message, looks, cropped):
+	"""One caption per variation: its style and viewpoint. The first also carries what the user asked for ("Variation of ...")
+	and a note if we cropped the photo. Telegram allows 1024 characters per caption."""
+	captions = []
+	for i, (style, viewpoint) in enumerate(looks):
+		lines = [message] if i == 0 and message else []
+		lines.append(f"{style}, {viewpoint}")
+		if i == 0 and cropped:
+			lines.append("Note: I centre-cropped your non-square image before sending it to the image model")
+		caption = "\n".join(lines)
+		captions.append(caption if len(caption) <= 1024 else caption[:1021] + "...")
+	return captions
 
 def download_file(image_url):
 	if isinstance(image_url, bytes):

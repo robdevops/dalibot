@@ -213,13 +213,16 @@ def photoInfo(response):
 ALBUM_MAX = 10 # Telegram albums hold 2 to 10 photos
 
 def sendMediaGroup(chat_id, items, caption, message_id=None):
-	"""Send photos as one album. items are URLs, file_ids or image bytes (uploaded). The caption goes on the first photo.
-	Albums can't carry buttons. Returns True if everything was sent."""
+	"""Send photos as one album. items are URLs, file_ids or image bytes (uploaded). caption is either one text, which goes on
+	the first photo (Telegram then shows it under the whole album), or a list with one caption per photo (Telegram then shows
+	each caption only when that photo is opened). Albums can't carry buttons. Returns True if everything was sent."""
 	items = list(items)
+	captions = list(caption) if isinstance(caption, (list, tuple)) else [caption] + [''] * (len(items) - 1)
+	captions += [''] * (len(items) - len(captions))
 	if len(items) == 1:
-		return bool(sendPhoto(chat_id, items[0], caption, message_id))
-	if len(items) > ALBUM_MAX: # more than one album's worth: several albums, one caption
-		return all([sendMediaGroup(chat_id, items[i:i + ALBUM_MAX], caption if i == 0 else '', message_id) for i in range(0, len(items), ALBUM_MAX)])
+		return bool(sendPhoto(chat_id, items[0], captions[0], message_id))
+	if len(items) > ALBUM_MAX: # more than one album's worth: several albums
+		return all([sendMediaGroup(chat_id, items[i:i + ALBUM_MAX], captions[i:i + ALBUM_MAX], message_id) for i in range(0, len(items), ALBUM_MAX)])
 	media, files = [], {}
 	for idx, item in enumerate(items):
 		entry = {'type': 'photo'}
@@ -230,8 +233,8 @@ def sendMediaGroup(chat_id, items, caption, message_id=None):
 			entry['media'] = 'attach://' + name
 		else:
 			entry['media'] = item
-		if idx == 0 and caption:
-			entry['caption'] = caption
+		if captions[idx]:
+			entry['caption'] = captions[idx]
 		media.append(entry)
 	url = webhooks['telegram'] + "sendMediaGroup"
 	fields = {'chat_id': chat_id, 'media': media, 'disable_notification': True, 'allow_sending_without_reply': True}
@@ -257,7 +260,7 @@ def sendMediaGroup(chat_id, items, caption, message_id=None):
 			e.close()
 		print("Telegram sendMediaGroup failed:", str(e), detail, file=stderr)
 		return False
-	print("200 OK Telegram sendMediaGroup", len(items), "photos;", caption)
+	print("200 OK Telegram sendMediaGroup", len(items), "photos;", captions[0])
 	return True
 
 def getFileURL(file_id):
