@@ -25,7 +25,7 @@ Telegram chat bot for AI image generation, powered by [OpenRouter](https://openr
 | `/qwen` | `qwen/qwen-image-2.1-turbo` | |
 
 * The same commands work in a photo's caption to get variations from that model.
-* Each generated image has buttons under it: 🔄 Reload generates again with the same model and prompt, and Monet, Dalí, Picasso, 8-bit and EGA regenerate it in that style. (Image variations do not get buttons.)
+* Each generated image has buttons under it: 🔄 Reload generates again with the same model and prompt, and Monet, Dalí, Picasso, 8-bit, EGA and Photo regenerate it in that style. (Image variations do not get buttons.)
 * The bot only responds in group chats, unless you set `TELEGRAM_ALLOWED_USER_IDS`
 
 # Requirements
