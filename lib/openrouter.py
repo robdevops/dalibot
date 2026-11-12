@@ -1,4 +1,4 @@
-import urllib.request, urllib.error, socket, json, base64, concurrent.futures
+import urllib.request, urllib.error, socket, json, base64, concurrent.futures, re
 from sys import stderr
 from lib.config import *
 
@@ -14,9 +14,30 @@ REMIX_INSTRUCTIONS = (
 	"If nothing conflicts, return the prompt unchanged. Reply with only the edited prompt."
 )
 
+# Words that might fight a style: realism and camera terms, resolution keywords, and the names of mediums and
+# art styles. Broad word stems on purpose: a false alarm only costs a quick text model call, a miss leaves a
+# conflicting word in the prompt. Composition words such as "close up" or "wide angle" are deliberately absent.
+POSSIBLE_CONFLICT = re.compile(r"""\b(?:
+	photo\w* | \w*realis\w* | hyperreal\w* | cinemat\w* | film | dslr | camera | lens\w* | bokeh | macro | depth\s+of\s+field | shot\s+on
+	| \d+\s*mm | f/\s?\d | iso\s?\d | exposure
+	| \d+k | uhd | hdr | hd | resolution
+	| paint\w* | oil | watercolo\w* | acrylic | gouache | pastel\w* | charcoal | pencil | sketch\w* | draw\w* | ink\w*
+	| illustrat\w* | cartoon\w* | comic\w* | anime | manga | pixel\w* | \d+-?bit | ega | vga | vector | [23]d | render\w* | cgi
+	| octane | unreal | claymation | litho\w* | woodcut | linocut | engrav\w* | etch\w* | stencil\w* | stamp\w* | tattoo\w*
+	| mosaic | collage | sculpt\w* | impressionis\w* | cubis\w* | surreal\w* | expressionis\w* | pop\s+art | low[-\s]?poly
+	| voxel | isometric | artstation | digital\s+art | concept\s+art | line\s*art | style\w* | aesthetic
+)\b""", re.IGNORECASE | re.VERBOSE)
+
+def may_conflict(prompt):
+	return bool(POSSIBLE_CONFLICT.search(prompt))
+
 def remix(prompt, style_cue):
 	"""Have a cheap text model strip words from a prompt that fight the style that is about to be added.
-	Returns the cleaned prompt, or None if anything goes wrong or the model embellishes (the caller then keeps the original)."""
+	Returns the cleaned prompt, or None if anything goes wrong or the model embellishes (the caller then keeps the original).
+	If the prompt has no word that could conflict there is nothing to remove, so the model is not called at all."""
+	if not may_conflict(prompt):
+		print("No words that fight a style; skipping the text model")
+		return prompt
 	body = {
 		'model': config_openrouter_text_model,
 		'messages': [
