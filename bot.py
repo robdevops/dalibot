@@ -90,9 +90,9 @@ def wsgi_handler(environ, start_response):
 	else:
 		return [b'']
 
-def startWorker(service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id, style=None):
+def startWorker(service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id, style=None, edit_message_id=None):
 	def runWorker():
-		worker.process_request(service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id, style)
+		worker.process_request(service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id, style, edit_message_id)
 
 	# process in a background thread so we don't keep the requesting client waiting
 	t = threading.Thread(target=runWorker)
@@ -141,7 +141,7 @@ def parseTelegram(inbound):
 	else:
 		print("[telegram]: unhandled message without text/photo/document")
 		return
-	return chat_id, user, userRealName, message, chat_type, message_id, file_id, None
+	return chat_id, user, userRealName, message, chat_type, message_id, file_id, None, None
 
 def originalPrompt(msg):
 	"""Recover the prompt a button's image was made from. The caption shows the prompt actually used
@@ -161,17 +161,17 @@ def originalPrompt(msg):
 
 def parseTelegramCallback(query):
 	"""A press of a button under an image: generate again with a model and style.
-	callback_data is 'g:<command>:<style>'. The prompt is the photo's caption, so nothing is stored."""
+	callback_data is '<action>:<command>:<style>': 'r' (Remix) replaces the image in place, 'g' posts a new image."""
 	if "message" not in query:
 		return
 	data = query.get("data", "")
 	if data == "reload": # buttons on images sent before styles existed
-		data = "g:" + config_telegramBotCommand + ":"
+		data = "r:" + config_telegramBotCommand + ":"
 	parts = data.split(":")
-	if len(parts) != 3 or parts[0] != "g" or parts[1] not in image_models or (parts[2] and parts[2] not in STYLES):
+	if len(parts) != 3 or parts[0] not in ("g", "r") or parts[1] not in image_models or (parts[2] and parts[2] not in STYLES):
 		return
-	command, style = parts[1], parts[2]
-	telegram.answerCallbackQuery(query["id"], "Generating again..." if not style else "Painting in the style of " + STYLES[style][0] + "...")
+	action, command, style = parts
+	telegram.answerCallbackQuery(query["id"], "Remixing..." if not style else "Painting in the style of " + STYLES[style][0] + "...")
 	msg = query["message"]
 	prompt = originalPrompt(msg)
 	if not prompt:
@@ -188,7 +188,7 @@ def parseTelegramCallback(query):
 	reply_to = msg.get("reply_to_message", {}).get("message_id")
 	message_id = str(reply_to) if reply_to else None
 	print("[Telegram button]:", user, command, style, prompt)
-	return str(msg["chat"]["id"]), user, userRealName, '/' + command + ' ' + prompt, chat_type, message_id, False, style or None
+	return str(msg["chat"]["id"]), user, userRealName, '/' + command + ' ' + prompt, chat_type, message_id, False, style or None, str(msg["message_id"]) if action == "r" else None
 
 def poll():
 	"""Telegram long polling: no web server, domain or certificate required."""
@@ -203,8 +203,8 @@ def poll():
 			try:
 				parsed = parseTelegram(update)
 				if parsed:
-					chat_id, user, userRealName, message, chat_type, message_id, file_id, style = parsed
-					startWorker('telegram', chat_id, user, message, botName, userRealName, chat_type, message_id, file_id, style)
+					chat_id, user, userRealName, message, chat_type, message_id, file_id, style, edit_message_id = parsed
+					startWorker('telegram', chat_id, user, message, botName, userRealName, chat_type, message_id, file_id, style, edit_message_id)
 			except Exception as e:
 				print("Error handling update:", repr(e), file=stderr)
 
@@ -220,6 +220,7 @@ def main(event):
 	# triage request - the Great Big If
 	file_id=False
 	style=None
+	edit_message_id=None
 	user=''
 	userRealName=''
 
@@ -237,7 +238,7 @@ def main(event):
 		parsed = parseTelegram(inbound)
 		if not parsed:
 			return
-		chat_id, user, userRealName, message, chat_type, message_id, file_id, style = parsed
+		chat_id, user, userRealName, message, chat_type, message_id, file_id, style, edit_message_id = parsed
 	# Slack
 	elif config_slackOutgoingWebhook and uri == urlparse(config_slackOutgoingWebhook).path:
 		service = 'slack'
@@ -274,7 +275,7 @@ def main(event):
 		print("Unknown URI", uri, file=stderr)
 		return
 
-	t = startWorker(service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id, style)
+	t = startWorker(service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id, style, edit_message_id)
 
 	#p = multiprocessing.Process(target=worker.process_request, args=(service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id))
 	#p.start()

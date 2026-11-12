@@ -86,16 +86,47 @@ def sendChatAction(chat_id, action='typing'):
 		pass # purely cosmetic
 
 def imageKeyboard(command, style=''):
-	"""Buttons under an image. callback_data is 'g:<command>:<style>': generate again with that model and style.
+	"""Buttons under an image. callback_data is '<action>:<command>:<style>': generate again with that model and style.
 	The style this image was made with gets Telegram's native blue 'primary' button style."""
-	def button(text, style_key, selected=False):
-		b = {'text': text, 'callback_data': f'g:{command}:{style_key}'}
+	def button(text, style_key, selected=False, action='g'):
+		b = {'text': text, 'callback_data': f'{action}:{command}:{style_key}'}
 		if selected:
 			b['style'] = 'primary' # needs a Telegram client from Feb 2026 or later; older ones show it unstyled
 		return b
 	styles = [button(label, key, key == style) for key, (label, _) in STYLES.items()]
 	rows = [styles[i:i + 3] for i in range(0, len(styles), 3)]
-	return {'inline_keyboard': [[button('\U0001F504 Reload', style)]] + rows}
+	# 'r' (remix) replaces this image in place; 'g' posts a new image in another style
+	return {'inline_keyboard': [[button('\U0001F504 Remix', style, action='r')]] + rows}
+
+def editPhoto(chat_id, message_id, photo, caption, reply_markup=None):
+	"""Replace the image, caption and buttons of one of our messages in place. Returns True on success."""
+	url = webhooks['telegram'] + "editMessageMedia"
+	media = {'type': 'photo', 'caption': caption}
+	if isinstance(photo, bytes):
+		media['media'] = 'attach://photo'
+		fields = {'chat_id': chat_id, 'message_id': message_id, 'media': json.dumps(media)}
+		if reply_markup: # editing the image without sending the buttons again would remove them
+			fields['reply_markup'] = json.dumps(reply_markup)
+		ext, mime = multipart.image_type(photo)
+		content_type, data = multipart.encode(fields, {'photo': ('image.' + ext, mime, photo)})
+		headers = {'Content-type': content_type}
+	else:
+		media['media'] = photo
+		fields = {'chat_id': chat_id, 'message_id': int(message_id), 'media': media}
+		if reply_markup:
+			fields['reply_markup'] = reply_markup
+		data = json.dumps(fields).encode('utf-8')
+		headers = {'Content-type': 'application/json'}
+	req = urllib.request.Request(url, data, headers, method='POST')
+	try:
+		urllib.request.urlopen(req, timeout=config_http_timeout)
+	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
+		if isinstance(e, urllib.error.HTTPError):
+			e.close()
+		print("Failure executing request:", url, str(e), file=stderr)
+		return False
+	print("200 OK Telegram editMessageMedia", caption)
+	return True
 
 def sendPhoto(chat_id, photo_url, caption, message_id=None, reply_markup=None):
 	url = webhooks['telegram'] + "sendPhoto?chat_id=" + str(chat_id)

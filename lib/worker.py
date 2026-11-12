@@ -46,14 +46,14 @@ class Typing:
 	def stop(self):
 		self.stopped.set()
 
-def process_request(service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id=False, style=None):
+def process_request(service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id=False, style=None, edit_message_id=None):
 	typing = Typing(service, chat_id)
 	try:
-		_process_request(typing, service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id, style)
+		_process_request(typing, service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id, style, edit_message_id)
 	finally:
 		typing.stop()
 
-def _process_request(typing, service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id, style):
+def _process_request(typing, service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id, style, edit_message_id):
 	now = int(time.time())
 	command, prompt, addressed = parse_command(message, botName)
 	model = image_models[command][0]
@@ -117,7 +117,10 @@ def _process_request(typing, service, chat_id, user, message, botName, userRealN
 				if success:
 					print("Sending result to Telegram")
 					caption = styled # show the prompt that was actually used
-					telegram.sendPhoto(chat_id, image_url, caption, reply_markup=telegram.imageKeyboard(command, style if style in STYLES else ''))
+					keyboard = telegram.imageKeyboard(command, style if style in STYLES else '')
+					# Remix replaces the image in place; if that fails, post a new one instead
+					if not (edit_message_id and telegram.editPhoto(chat_id, edit_message_id, image_url, caption, keyboard)):
+						telegram.sendPhoto(chat_id, image_url, caption, reply_markup=keyboard)
 					if config_archive:
 						image_bytesio = download_file(image_url)
 						filename = config_archive_dir + '/image_' + str(now) + '.' + image_type(image_url)[0]
