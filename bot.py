@@ -30,6 +30,7 @@ import lib.worker as worker
 from lib.worker import mentions_bot
 import lib.openrouter as openrouter
 import lib.store as store
+store.check()
 from lib.styles import STYLES
 if config_telegramBotToken:
 	import lib.telegram as telegram

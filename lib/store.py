@@ -80,6 +80,14 @@ class SqliteStore:
 			return record
 		self._modify(chat_id, message_id, change)
 
+	def describe(self):
+		db = self._connect()
+		try:
+			count = db.execute('SELECT COUNT(*) FROM messages').fetchone()[0]
+		finally:
+			db.close()
+		return f'SQLite at {self.path}, {count} saved image messages'
+
 class DynamoStore:
 	def __init__(self, table, days):
 		import boto3 # included in the Lambda Python runtime
@@ -110,6 +118,10 @@ class DynamoStore:
 			ExpressionAttributeNames={'#k': key(style), '#cur': 'current', '#ttl': 'ttl'},
 			ExpressionAttributeValues={':image': {'file_id': file_id, 'caption': caption, 'base': base}, ':k': key(style), ':ttl': expires})
 
+	def describe(self):
+		self.get('check', 'check') # a read, which fails if the table, region or permissions are wrong
+		return f"DynamoDB table '{self.table.name}' in {self.table.meta.client.meta.region_name} (reads work)"
+
 	def set_current(self, chat_id, message_id, style):
 		self.table.update_item(Key={'id': self._id(chat_id, message_id)},
 			UpdateExpression='SET #cur = :k', ConditionExpression='attribute_exists(id)',
@@ -127,6 +139,14 @@ def backend():
 		else:
 			raise ValueError(f'DALIBOT_STORE must be sqlite or dynamodb, not {config_store!r}')
 	return _backend
+
+def check():
+	"""Say at start-up whether the image history works, so a missing table, wrong region or unreadable file
+	shows in the logs straight away instead of as buttons that quietly regenerate."""
+	try:
+		print('Image history:', backend().describe(), file=stderr)
+	except Exception as e:
+		print(f'Image history is NOT working ({config_store}): {e!r}. The style buttons will regenerate images instead of switching between saved ones.', file=stderr)
 
 def _safely(operation, default, *args):
 	try:
