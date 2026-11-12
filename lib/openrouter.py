@@ -9,6 +9,7 @@ REMIX_INSTRUCTIONS = (
 	"You edit prompts for an AI image generator. A style phrase will be appended to the prompt afterwards. "
 	"Remove only the words and phrases in the prompt that describe a conflicting style, medium or rendering, "
 	"for example 'photorealistic', 'oil painting', 'cartoon', 'pixel art', '4k', or camera and lens details. "
+	"Keep the subject and any words about composition or framing, such as 'close up' or 'wide angle'. "
 	"Do not add anything. Do not rephrase, reorder or embellish the remaining words. "
 	"If nothing conflicts, return the prompt unchanged. Reply with only the edited prompt."
 )
@@ -36,11 +37,20 @@ def remix(prompt, style_cue):
 			e.close()
 		print("Prompt cleanup failed, using the original prompt:", repr(e), file=stderr)
 		return None
-	if not text or len(text) > len(prompt):
-		# an edit that only removes words can never be longer than the original
+	if not only_removes_few_words(prompt, text):
 		print("Prompt cleanup returned an unusable edit, using the original prompt:", repr(text), file=stderr)
 		return None
 	return text
+
+def only_removes_few_words(original, edited):
+	"""True if edited is the original with some words deleted (nothing added or reordered),
+	keeping at least half of the words, so the cleanup cannot gut or embellish a prompt."""
+	words = lambda s: [w.strip('.,;:!?"\'()').lower() for w in s.split() if w.strip('.,;:!?"\'()')]
+	a, b = words(original), words(edited)
+	if not b or len(b) * 2 < len(a):
+		return False
+	remaining = iter(a)
+	return all(word in remaining for word in b) # each edited word must appear in order in the original
 
 def generate(prompt, model=None):
 	"""Text to image. Returns (True, image_bytes) or (False, error message)."""

@@ -104,7 +104,7 @@ def _process_request(typing, service, chat_id, user, message, botName, userRealN
 	else:
 		if addressed or chat_type == 'private':
 			message = prompt # the prompt as the user wrote it; it is also the caption, so buttons can regenerate from it
-			if len(message.split()) > 2:
+			if len(message.split()) > 2 or style or edit_message_id: # a button press already passed this check once
 				typing.start()
 				print("Sending prompt to OpenRouter:", model, style or "")
 				styled = message
@@ -124,7 +124,7 @@ def _process_request(typing, service, chat_id, user, message, botName, userRealN
 					if not (edit_message_id and telegram.editPhoto(chat_id, edit_message_id, image_url, caption, keyboard)):
 						if edit_message_id:
 							print("Remix: in-place edit failed, posting a new image instead", file=stderr)
-						telegram.sendPhoto(chat_id, image_url, caption, reply_markup=keyboard)
+						telegram.sendPhoto(chat_id, image_url, caption, message_id, reply_markup=keyboard)
 					if config_archive:
 						image_bytesio = download_file(image_url)
 						filename = config_archive_dir + '/image_' + str(now) + '.' + image_type(image_url)[0]
