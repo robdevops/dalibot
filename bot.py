@@ -159,6 +159,8 @@ def originalPrompt(msg):
 			return caption[:-len(", " + cue)]
 	return caption
 
+MIN_BUTTON_WORDS = 4 # Remix and the style buttons need a prompt with at least this many words
+
 def parseTelegramCallback(query):
 	"""A press of a button under an image: generate again with a model and style.
 	callback_data is '<action>:<command>:<style>': 'r' (Remix) replaces the image in place, 'g' posts a new image."""
@@ -171,17 +173,21 @@ def parseTelegramCallback(query):
 	if len(parts) != 3 or parts[0] not in ("g", "r") or parts[1] not in image_models or (parts[2] and parts[2] not in STYLES):
 		return
 	action, command, style = parts
-	telegram.answerCallbackQuery(query["id"], "Remixing..." if not style else "Painting in the style of " + STYLES[style][0] + "...")
 	msg = query["message"]
-	prompt = originalPrompt(msg)
-	if not prompt:
-		return
 	sender = query["from"]
 	user_id = str(sender["id"])
 	chat_type = msg["chat"]["type"]
 	if chat_type == "private" and user_id not in config_telegramAllowedUserIDs:
 		print(user_id, "is not whitelisted. Ignoring.", file=stderr)
+		telegram.answerCallbackQuery(query["id"])
 		return
+	prompt = originalPrompt(msg)
+	if len(prompt.split()) < MIN_BUTTON_WORDS:
+		# reject with a pop-up on the button: nothing is generated or posted to the chat
+		print("[Telegram button]: prompt too short to remix:", repr(prompt), file=stderr)
+		telegram.answerCallbackQuery(query["id"], f"This prompt is too short to remix. Please send a new prompt with at least {MIN_BUTTON_WORDS} words.", alert=True)
+		return
+	telegram.answerCallbackQuery(query["id"], "Remixing..." if not style else "Painting in the style of " + STYLES[style][0] + "...")
 	user = '@' + sender["username"] if "username" in sender else '@' + sender["first_name"]
 	userRealName = sender["first_name"]
 	# reply to the original prompt message if it still exists

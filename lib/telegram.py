@@ -62,12 +62,14 @@ def getMe():
 		return False
 	return json.load(r)['result']
 
-def answerCallbackQuery(callback_query_id, text=None):
-	"""Acknowledge a button press so Telegram stops showing the loading spinner."""
+def answerCallbackQuery(callback_query_id, text=None, alert=False):
+	"""Acknowledge a button press so Telegram stops showing the loading spinner.
+	text appears as a brief toast, or as a pop-up the user must dismiss if alert is True."""
 	url = webhooks['telegram'] + "answerCallbackQuery"
 	data = {'callback_query_id': callback_query_id}
 	if text:
 		data['text'] = text
+		data['show_alert'] = alert
 	req = urllib.request.Request(url, json.dumps(data).encode('utf-8'), {'Content-type': 'application/json'}, method='POST')
 	try:
 		urllib.request.urlopen(req, timeout=config_http_timeout)
