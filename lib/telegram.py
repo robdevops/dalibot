@@ -87,22 +87,45 @@ def sendChatAction(chat_id, action='typing'):
 	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout):
 		pass # purely cosmetic
 
-def imageKeyboard(command, style=''):
+def imageKeyboard(command, style='', pending=None):
 	"""Buttons under an image. callback_data is '<action>:<command>:<style>'.
 	'g' goes to that style: the image we already made for it if there is one, otherwise a new one.
 	'r' (Remix) always makes a new image in the current style. Both replace the image in place.
-	The style being shown gets Telegram's native blue 'primary' button style."""
+	The style being shown gets Telegram's native blue 'primary' button style.
+	pending=(action, style) shows the keyboard while that button's image is being made: it gets an hourglass and
+	the native green 'success' style, nothing else is highlighted, and every button just says "still working"."""
 	def button(text, style_key, selected=False, action='g'):
 		b = {'text': text, 'callback_data': f'{action}:{command}:{style_key}'}
-		if selected:
+		if pending:
+			b['callback_data'] = 'n:-:' # busy: see parseTelegramCallback
+			if pending == (action, style_key):
+				b['text'] = '\u23F3 ' + text.replace('\U0001F504 ', '') # the hourglass replaces the refresh icon
+				b['style'] = 'success'
+		elif selected:
 			b['style'] = 'primary' # needs a Telegram client from Feb 2026 or later; older ones show it unstyled
 		return b
 	styles = [button(label, key, key == style) for key, (label, _) in STYLES.items()]
 	rows = [styles[i:i + 3] for i in range(0, len(styles), 3)]
 	first_row = [button('\U0001F504 Remix', style, action='r')]
-	if style: # a way back to the image before any style was applied
+	if style or (pending and pending == ('g', '')): # a way back to the image before any style was applied
 		first_row.append(button('\u21A9 Original', ''))
 	return {'inline_keyboard': [first_row] + rows}
+
+def editCaption(chat_id, message_id, caption, reply_markup=None):
+	"""Change just the caption and buttons of one of our photo messages. Returns True on success."""
+	url = webhooks['telegram'] + "editMessageCaption"
+	fields = {'chat_id': chat_id, 'message_id': int(message_id), 'caption': caption}
+	if reply_markup:
+		fields['reply_markup'] = reply_markup
+	req = urllib.request.Request(url, json.dumps(fields).encode('utf-8'), {'Content-type': 'application/json'}, method='POST')
+	try:
+		urllib.request.urlopen(req, timeout=config_http_timeout)
+	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
+		if isinstance(e, urllib.error.HTTPError):
+			e.close()
+		print("Telegram editMessageCaption failed:", str(e), file=stderr)
+		return False
+	return True
 
 def editPhoto(chat_id, message_id, photo, caption, reply_markup=None):
 	"""Replace the image, caption and buttons of one of our messages in place.

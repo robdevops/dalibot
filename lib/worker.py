@@ -47,14 +47,50 @@ class Typing:
 	def stop(self):
 		self.stopped.set()
 
-def process_request(service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id=False, style=None, edit_message_id=None):
+class Pending:
+	"""While a button press is being worked on, show it on the message: the pressed button gets an hourglass
+	and the native green style, and the caption says what is happening. If we end up not replacing the
+	image (an error, or we had to post a new message instead), put the previous caption and buttons back."""
+	def __init__(self, chat_id, message_id, command, button):
+		self.chat_id, self.message_id, self.command, self.button = chat_id, message_id, command, button
+		self.thread = None
+		self.replaced = False # set when the image has been replaced in place
+
+	def start(self):
+		if self.button and self.message_id and not self.thread:
+			self.thread = threading.Thread(target=self._show, daemon=True) # in parallel with generating
+			self.thread.start()
+
+	def _show(self):
+		target = self.button['target']
+		if self.button['action'] == 'r':
+			line = "\u23F3 Remixing\u2026"
+		elif target:
+			line = "\u23F3 Painting in the style of " + STYLES[target][0] + "\u2026"
+		else:
+			line = "\u23F3 Generating\u2026"
+		telegram.editCaption(self.chat_id, self.message_id, line, telegram.imageKeyboard(self.command, self.button['style'], pending=(self.button['action'], target)))
+
+	def wait(self):
+		if self.thread:
+			self.thread.join(timeout=10) # so this can never land after the final image
+
+	def finish(self):
+		if self.thread and not self.replaced:
+			self.wait()
+			telegram.editCaption(self.chat_id, self.message_id, self.button['caption'], telegram.imageKeyboard(self.command, self.button['style']))
+
+def process_request(service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id=False, style=None, edit_message_id=None, button=None):
 	typing = Typing(service, chat_id)
+	command = parse_command(message, botName)[0]
+	pending = Pending(chat_id, edit_message_id, command, button if service == 'telegram' else None)
 	try:
-		_process_request(typing, service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id, style, edit_message_id)
+		_process_request(typing, pending, service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id, style, edit_message_id)
 	finally:
 		typing.stop()
+		pending.finish()
 
-def _process_request(typing, service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id, style, edit_message_id):
+def _process_request(typing, pending, service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id, style, edit_message_id):
 	now = int(time.time())
 	command, prompt, addressed = parse_command(message, botName)
 	model = image_models[command][0]
@@ -108,6 +144,7 @@ def _process_request(typing, service, chat_id, user, message, botName, userRealN
 			is_button = bool(style or edit_message_id)
 			if len(message.split()) >= MIN_PROMPT_WORDS or is_button:
 				typing.start()
+				pending.start()
 				if len(message.split()) < MIN_PROMPT_WORDS: # only reachable from a button press
 					# a button press on a very short prompt: have the text model flesh it out so it still works
 					message = openrouter.expand(message, MIN_PROMPT_WORDS)
@@ -128,10 +165,12 @@ def _process_request(typing, service, chat_id, user, message, botName, userRealN
 					# Button presses replace the image in place; if that fails, post a new one instead
 					sent = False
 					if edit_message_id:
+						pending.wait() # the 'working' edit must land first, or it could overwrite the new image
 						print("Replacing message", edit_message_id, "in place;", len(image_url), "bytes" if isinstance(image_url, bytes) else "(url)")
 						sent = telegram.editPhoto(chat_id, edit_message_id, image_url, caption, keyboard)
 						if sent:
 							sent['message_id'] = edit_message_id
+							pending.replaced = True
 						else:
 							print("In-place edit failed, posting a new image instead", file=stderr)
 					if not sent:
