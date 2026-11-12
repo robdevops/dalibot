@@ -42,15 +42,25 @@ def remix(prompt, style_cue):
 		return None
 	return text
 
+def words(text):
+	"""Lower-case words with surrounding punctuation removed."""
+	strip = '.,;:!?"\'()'
+	return [w.strip(strip).lower() for w in text.split() if w.strip(strip)]
+
+def is_subsequence(small, big):
+	remaining = iter(big)
+	return all(word in remaining for word in small) # each word must appear, in order
+
 def only_removes_few_words(original, edited):
 	"""True if edited is the original with some words deleted (nothing added or reordered),
 	keeping at least half of the words, so the cleanup cannot gut or embellish a prompt."""
-	words = lambda s: [w.strip('.,;:!?"\'()').lower() for w in s.split() if w.strip('.,;:!?"\'()')]
 	a, b = words(original), words(edited)
-	if not b or len(b) * 2 < len(a):
-		return False
-	remaining = iter(a)
-	return all(word in remaining for word in b) # each edited word must appear in order in the original
+	return bool(b) and len(b) * 2 >= len(a) and is_subsequence(b, a)
+
+def only_adds_few_words(original, edited, max_added):
+	"""True if edited is the original (every word, in order) plus at most max_added more words."""
+	a, b = words(original), words(edited)
+	return is_subsequence(a, b) and len(b) - len(a) <= max_added
 
 FIX_INSTRUCTIONS = (
 	"You fix prompts for an AI image generator. The prompt must clearly mention the style '{label}'. "
@@ -81,25 +91,28 @@ def fix_style(prompt, label):
 			e.close()
 		print("Style fix failed:", repr(e), file=stderr)
 		return None
-	return text if text and len(text) <= 2 * len(prompt) + 60 else None
+	# a fix may add a short phrase such as 'as a photograph', never rewrite the prompt
+	return text if text and only_adds_few_words(prompt, text, 6) else None
 
 EXPAND_INSTRUCTIONS = (
-	"You expand very short prompts for an AI image generator. Add a few concrete details about the setting, "
-	"lighting or composition so the prompt has at least {min_words} words, and keep the original subject. "
-	"Do not add any art style, medium or photographic terms. Reply with only the expanded prompt, under 25 words."
+	"The prompt below is too short. Make it at least {min_words} words by adding as few words as possible: "
+	"{need} word(s) is ideal. Prefer a simple adjective or qualifier next to the subject (for example 'fly' becomes 'a small fly'). "
+	"Do not add a setting, lighting, composition, style or medium. Keep every original word, in order. "
+	"Reply with only the new prompt."
 )
 
 def expand(prompt, min_words):
-	"""Lengthen a very short prompt so a button press can still produce an image.
-	Uses the cheap text model; if that fails, falls back to fixed wording, so this never fails."""
+	"""Lengthen a too-short prompt by the minimum needed, so a button press can still produce an image.
+	Never adds more than a word or so beyond what is required; if the model adds more, or fails, fixed filler is used instead."""
+	need = max(1, min_words - len(words(prompt)))
 	body = {
 		'model': config_openrouter_text_model,
 		'messages': [
-			{'role': 'system', 'content': EXPAND_INSTRUCTIONS.format(min_words=min_words)},
+			{'role': 'system', 'content': EXPAND_INSTRUCTIONS.format(min_words=min_words, need=need)},
 			{'role': 'user', 'content': prompt},
 		],
-		'max_tokens': 100,
-		'temperature': 0.7,
+		'max_tokens': 60,
+		'temperature': 0,
 	}
 	req = urllib.request.Request(CHAT_URL, data=json.dumps(body).encode(), method='POST')
 	req.add_header('Content-Type', 'application/json')
@@ -107,14 +120,24 @@ def expand(prompt, min_words):
 	try:
 		with urllib.request.urlopen(req, timeout=20) as r:
 			text = json.load(r)['choices'][0]['message']['content'].strip().strip('"').strip()
-		if min_words <= len(text.split()) <= 40:
+		if len(words(text)) >= min_words and only_adds_few_words(prompt, text, need + 1):
 			return text
-		print("Prompt expansion returned an unusable result:", repr(text), file=stderr)
+		print("Prompt expansion added too much or too little, using filler:", repr(text), file=stderr)
 	except Exception as e:
 		if isinstance(e, urllib.error.HTTPError):
 			e.close()
-		print("Prompt expansion failed:", repr(e), file=stderr)
-	return 'A detailed picture of ' + prompt
+		print("Prompt expansion failed, using filler:", repr(e), file=stderr)
+	return filler(prompt, min_words)
+
+def filler(prompt, min_words):
+	"""The least we can add by hand to reach min_words: an article, then 'image'."""
+	if prompt.split()[0].lower() not in ('a', 'an', 'the'):
+		prompt = 'A ' + prompt
+	if len(prompt.split()) < min_words:
+		prompt += ' image'
+	if len(prompt.split()) < min_words:
+		prompt = 'An image of ' + prompt
+	return prompt
 
 def generate(prompt, model=None):
 	"""Text to image. Returns (True, image_bytes) or (False, error message)."""

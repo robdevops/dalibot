@@ -33,7 +33,7 @@ def with_style(prompt, style, fix=None):
 	"""prompt + the style phrase, checked to contain the button text.
 	If it doesn't, fix(prompt, label) (a model) gets one chance to repair it, and as a last resort we append the label."""
 	label, cue = STYLES[style]
-	styled = prompt + ', ' + cue
+	styled = prompt.rstrip(' .,;:!?') + ', ' + cue # no 'alleyway., as stencil art'
 	if not contains_label(styled, label) and fix:
 		styled = fix(styled, label) or styled
 	if not contains_label(styled, label):
