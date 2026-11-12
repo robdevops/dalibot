@@ -87,11 +87,11 @@ def sendChatAction(chat_id, action='typing'):
 
 def imageKeyboard(command, style=''):
 	"""Buttons under an image. callback_data is 'g:<command>:<style>': generate again with that model and style.
-	The style this image was made with gets Telegram's native green 'success' button style."""
+	The style this image was made with gets Telegram's native blue 'primary' button style."""
 	def button(text, style_key, selected=False):
 		b = {'text': text, 'callback_data': f'g:{command}:{style_key}'}
 		if selected:
-			b['style'] = 'success' # needs a Telegram client from Feb 2026 or later; older ones show it unstyled
+			b['style'] = 'primary' # needs a Telegram client from Feb 2026 or later; older ones show it unstyled
 		return b
 	styles = [button(label, key, key == style) for key, (label, _) in STYLES.items()]
 	rows = [styles[i:i + 3] for i in range(0, len(styles), 3)]
