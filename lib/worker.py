@@ -119,7 +119,11 @@ def _process_request(typing, service, chat_id, user, message, botName, userRealN
 					caption = styled # show the prompt that was actually used
 					keyboard = telegram.imageKeyboard(command, style if style in STYLES else '')
 					# Remix replaces the image in place; if that fails, post a new one instead
+					if edit_message_id:
+						print("Remix: replacing message", edit_message_id, "in place;", len(image_url) if isinstance(image_url, bytes) else "url", "bytes" if isinstance(image_url, bytes) else "")
 					if not (edit_message_id and telegram.editPhoto(chat_id, edit_message_id, image_url, caption, keyboard)):
+						if edit_message_id:
+							print("Remix: in-place edit failed, posting a new image instead", file=stderr)
 						telegram.sendPhoto(chat_id, image_url, caption, reply_markup=keyboard)
 					if config_archive:
 						image_bytesio = download_file(image_url)

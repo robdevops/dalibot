@@ -121,9 +121,14 @@ def editPhoto(chat_id, message_id, photo, caption, reply_markup=None):
 	try:
 		urllib.request.urlopen(req, timeout=config_http_timeout)
 	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
+		detail = ''
 		if isinstance(e, urllib.error.HTTPError):
+			try:
+				detail = e.read().decode()[:300] # Telegram says why, e.g. "message is not modified"
+			except Exception:
+				pass
 			e.close()
-		print("Failure executing request:", url, str(e), file=stderr)
+		print("Telegram editMessageMedia failed:", str(e), detail, file=stderr)
 		return False
 	print("200 OK Telegram editMessageMedia", caption)
 	return True
