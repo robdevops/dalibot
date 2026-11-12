@@ -17,7 +17,10 @@ Go to the [Lambda console](https://console.aws.amazon.com/lambda/home)
 * Go to the _Configuration_ tab
   * Go to _General configuration_ and _Edit_
     * **Memory:** `512` MB (the bot holds each image in memory several times over; a 2 MB image used 110 of the default 128 MB)
-    * **Timeout:** `1` min
+    * **Timeout:** `3` min (image models can take a minute or more, especially when making variations from a photo; the bot stops waiting a little before this and tells the user, so the function is not killed)
+    * Hit _Save_
+  * Go to _Asynchronous invocation_ and _Edit_
+    * **Retry attempts:** `0`. Lambda otherwise re-runs a failed request automatically, which would make and pay for the same images again.
     * Hit _Save_
 
 ## Create the API Gateway

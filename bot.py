@@ -30,6 +30,7 @@ import lib.worker as worker
 from lib.worker import mentions_bot
 import lib.openrouter as openrouter
 import lib.store as store
+import lib.deadline as deadline
 store.check()
 from lib.styles import STYLES
 if config_telegramBotToken:
@@ -40,6 +41,7 @@ import threading
 #import multiprocessing
 
 def lambda_handler(event, context):
+	deadline.start(context) # so slow waits give up before Lambda kills us
 	response = main(event)
 	if response:
 		return response

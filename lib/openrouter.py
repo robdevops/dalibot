@@ -1,6 +1,7 @@
-import urllib.request, urllib.error, socket, json, base64, concurrent.futures, random, re
+import urllib.request, urllib.error, http.client, socket, json, base64, concurrent.futures, random, re
 from sys import stderr
 from lib.config import *
+import lib.deadline as deadline
 from lib.styles import STYLES
 
 URL = 'https://openrouter.ai/api/v1/images'
@@ -31,7 +32,7 @@ def remix(prompt, style_cue):
 	req.add_header('Content-Type', 'application/json')
 	req.add_header('Authorization', 'Bearer ' + (config_openrouter_api_key or ''))
 	try:
-		with urllib.request.urlopen(req, timeout=20) as r:
+		with urllib.request.urlopen(req, timeout=deadline.limit(20)) as r:
 			text = json.load(r)['choices'][0]['message']['content'].strip().strip('"').strip()
 	except Exception as e:
 		if isinstance(e, urllib.error.HTTPError):
@@ -85,7 +86,7 @@ def fix_style(prompt, label):
 	req.add_header('Content-Type', 'application/json')
 	req.add_header('Authorization', 'Bearer ' + (config_openrouter_api_key or ''))
 	try:
-		with urllib.request.urlopen(req, timeout=20) as r:
+		with urllib.request.urlopen(req, timeout=deadline.limit(20)) as r:
 			text = json.load(r)['choices'][0]['message']['content'].strip().strip('"').strip()
 	except Exception as e:
 		if isinstance(e, urllib.error.HTTPError):
@@ -119,7 +120,7 @@ def expand(prompt, min_words):
 	req.add_header('Content-Type', 'application/json')
 	req.add_header('Authorization', 'Bearer ' + (config_openrouter_api_key or ''))
 	try:
-		with urllib.request.urlopen(req, timeout=20) as r:
+		with urllib.request.urlopen(req, timeout=deadline.limit(20)) as r:
 			text = json.load(r)['choices'][0]['message']['content'].strip().strip('"').strip()
 		if len(words(text)) >= min_words and only_adds_few_words(prompt, text, need + 1):
 			return text
@@ -225,7 +226,7 @@ def _ask(system, user, max_tokens, temperature):
 	req.add_header('Content-Type', 'application/json')
 	req.add_header('Authorization', 'Bearer ' + (config_openrouter_api_key or ''))
 	try:
-		with urllib.request.urlopen(req, timeout=20) as r:
+		with urllib.request.urlopen(req, timeout=deadline.limit(20)) as r:
 			return json.load(r)['choices'][0]['message']['content'].strip()
 	except urllib.error.HTTPError as e:
 		e.close()
@@ -239,7 +240,7 @@ def _request(body, model=None):
 	req.add_header('Content-Type', 'application/json')
 	req.add_header('Authorization', 'Bearer ' + (config_openrouter_api_key or ''))
 	try:
-		r = urllib.request.urlopen(req, timeout=config_image_timeout)
+		r = urllib.request.urlopen(req, timeout=deadline.limit(config_image_timeout))
 	except urllib.error.HTTPError as e:
 		try:
 			error = json.load(e)['error']['message']
@@ -249,8 +250,8 @@ def _request(body, model=None):
 		error = f"OpenRouter error {e.code}: {error}"
 		print(error, file=stderr)
 		return False, error
-	except (urllib.error.URLError, socket.timeout) as e:
-		error = "OpenRouter connection error: " + str(e)
+	except (urllib.error.URLError, OSError) as e:
+		error = connection_error(e)
 		print(error, file=stderr)
 		return False, error
 	try:
@@ -260,6 +261,18 @@ def _request(body, model=None):
 		error = "Unexpected response from OpenRouter: " + repr(e)
 		print(error, file=stderr)
 		return False, error
+	except (OSError, http.client.HTTPException) as e: # e.g. a timeout while reading the picture
+		error = connection_error(e)
+		print(error, file=stderr)
+		return False, error
+	finally:
+		r.close()
+
+def connection_error(e):
+	"""A message for the user about a network problem; a timeout gets plain wording."""
+	if isinstance(e, TimeoutError) or isinstance(getattr(e, 'reason', None), TimeoutError) or 'timed out' in str(e):
+		return "OpenRouter took too long to make the image. Please try again."
+	return "OpenRouter connection error: " + str(e)
 
 KEY_URL = 'https://openrouter.ai/api/v1/key'
 
