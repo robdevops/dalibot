@@ -21,6 +21,8 @@ STYLES = {
 	'render3d':    ('3D render', 'as a 3D render'),
 	'popart':      ('Pop art', 'as pop art'),
 	'cyberpunk':   ('Cyberpunk', 'as cyberpunk art'),
+	'ukiyoe':      ('Ukiyo-e', 'as a ukiyo-e woodblock print'),
+	'bw':          ('Black & white', 'in black & white'),
 }
 
 import unicodedata
