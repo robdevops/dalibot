@@ -147,9 +147,9 @@ def generate(prompt, model=None):
 # different. Four requests, four directions: together they come out clearly unlike the original and each other.
 VARIATION_TWISTS = [
 	"change the composition and the camera angle",
-	"change the colour palette and the lighting",
-	"change the setting, the season or the time of day",
 	"reinterpret it with a different mood and a different artistic treatment",
+	"change both the composition and camera angle and reinterpret it with a different mood and artistic treatment",
+	"change what the subject is doing: give it a different pose, expression or action",
 ]
 
 def variation_prompt(note, twist):
