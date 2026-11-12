@@ -146,9 +146,9 @@ def generate(prompt, model=None):
 # Asking a model for "a variation" tends to return near copies, so each image is told to change something
 # different. Four requests, four directions: together they come out clearly unlike the original and each other.
 VARIATION_TWISTS = [
-	"change the composition and the camera angle",
+	"show it from a different viewpoint with a different composition (for example from above, from the side, much closer or much further away)",
 	"reinterpret it with a different mood and a different artistic treatment",
-	"change both the composition and camera angle and reinterpret it with a different mood and artistic treatment",
+	"show it from a different viewpoint with a different composition, and reinterpret it with a different mood and artistic treatment",
 	"change what the subject is doing: give it a different pose, expression or action",
 ]
 
