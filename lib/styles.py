@@ -14,3 +14,16 @@ STYLES = {
 	'tattoo':      ('Tattoo', 'as a tattoo design'),
 	'stencil':     ('Stencil', 'as stencil art'),
 }
+
+# The button text must appear in the prompt (case-insensitive substring: "Photo" is in "as a photograph"),
+# so what you press is what the model is told. Fail at start-up if an edit breaks that.
+for _key, (_label, _cue) in STYLES.items():
+	assert _label.lower() in _cue.lower(), f"style {_key!r}: button text {_label!r} is not in its phrase {_cue!r}"
+
+def with_style(prompt, style):
+	"""prompt + the style phrase, guaranteed to contain the button text."""
+	label, cue = STYLES[style]
+	styled = prompt + ', ' + cue
+	if label.lower() not in styled.lower():
+		styled += ', ' + label
+	return styled

@@ -11,7 +11,7 @@ from lib.config import *
 import lib.telegram as telegram
 import lib.openrouter as openrouter
 from lib.multipart import image_type
-from lib.styles import STYLES
+from lib.styles import STYLES, with_style
 
 def parse_command(message, botName):
 	"""Work out which model a message asks for. Returns (command, prompt, addressed).
@@ -116,7 +116,7 @@ def _process_request(typing, service, chat_id, user, message, botName, userRealN
 				if style in STYLES:
 					# a cheap text model removes words that fight the style; we then append a short style phrase
 					cue = STYLES[style][1]
-					styled = (openrouter.remix(message, cue) or message) + ', ' + cue
+					styled = with_style(openrouter.remix(message, cue) or message, style)
 					print("Styled prompt:", styled)
 				success, image_url = openrouter.generate(styled, model)
 				if success:
