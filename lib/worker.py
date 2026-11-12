@@ -14,17 +14,32 @@ import lib.store as store
 from lib.multipart import image_type
 from lib.styles import STYLES, with_style
 
+def mention_pattern(botName):
+	"""Matches @botname anywhere in a text (case-insensitive, and not as part of a longer name or an email address)."""
+	return re.compile(r'(?<!\w)' + re.escape(botName) + r'(?!\w)', re.IGNORECASE)
+
+def mentions_bot(text, botName):
+	return bool(botName) and bool(mention_pattern(botName).search(text))
+
+def without_mention(text, botName):
+	"""text with every @botname removed and the spaces tidied."""
+	if not botName:
+		return text.strip()
+	text = re.sub(r'\s+', ' ', mention_pattern(botName).sub(' ', text)).strip()
+	return re.sub(r'\s+([,.;:!?])', r'\1', text) # "a fox @bot, please" -> "a fox, please"
+
 def parse_command(message, botName):
 	"""Work out which model a message asks for. Returns (command, prompt, addressed).
-	'/flux a cat' -> ('flux', 'a cat', True); '@bot a cat' -> (default command, 'a cat', True)."""
+	'/flux a cat' -> ('flux', 'a cat', True); '@bot a cat' or 'a cat @bot' -> (default command, 'a cat', True).
+	The bot can be tagged anywhere in the text; the tag is not part of the prompt."""
 	text = message.strip()
 	m = re.match(r'^/(\w+)(@\w+)?\s*(.*)$', text, re.S)
 	if m and (m.group(1).lower() in image_models or m.group(1).lower() in CREDITS_COMMANDS):
 		if m.group(2) and botName and m.group(2).lower() != botName.lower():
 			return config_telegramBotCommand, text, False # addressed to a different bot
-		return m.group(1).lower(), m.group(3).strip(), True
-	if botName and text.startswith(botName):
-		return config_telegramBotCommand, text[len(botName):].strip(), True
+		return m.group(1).lower(), without_mention(m.group(3), botName), True
+	if mentions_bot(text, botName):
+		return config_telegramBotCommand, without_mention(text, botName), True
 	return config_telegramBotCommand, text, False
 
 class Typing:

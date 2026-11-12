@@ -27,6 +27,7 @@ from sys import stderr
 from urllib.parse import urlparse
 
 import lib.worker as worker
+from lib.worker import mentions_bot
 import lib.openrouter as openrouter
 import lib.store as store
 from lib.styles import STYLES
@@ -159,7 +160,7 @@ def parseTelegram(inbound):
 		# Tagging the bot (or sending a bare command) in reply to a picture asks for variations of that picture.
 		# A command with a prompt, like "/dream a red fox", stays a text prompt even when it is a reply.
 		replied_image = imageFileId(msg.get("reply_to_message") or {})
-		if replied_image and addressed and (not prompt or (botName and message.strip().startswith(botName))):
+		if replied_image and addressed and (not prompt or mentions_bot(message, botName)):
 			file_id = replied_image
 			print("[Telegram reply to a picture]:", user, message)
 	elif "photo" in msg:

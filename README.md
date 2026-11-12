@@ -15,7 +15,7 @@ Telegram chat bot for AI image generation, powered by [OpenRouter](https://openr
 
 # Usage
 * The prompt must be three or more words
-* The prompt must begin with a command, or @mention the bot if it has admin access in the group. Each command uses a different model:
+* The prompt must begin with a command, or tag the bot (`@botname`, anywhere in the message) if it has admin access in the group. Each command uses a different model:
 
 | Command | Model | Notes |
 | --- | --- | --- |
