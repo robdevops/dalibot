@@ -27,7 +27,7 @@ Telegram chat bot for AI image generation, powered by [OpenRouter](https://openr
 * The same commands work in a photo's caption to get variations from that model.
 * Each generated image has buttons under it. Every button replaces the image in place:
   * 🔄 Remix generates again with the same model, prompt and style.
-  * The style buttons (Monet, Dalí, Picasso, 8-bit, EGA, Photo, Watercolour, Hand drawn, Sketch, Lithograph, Rubber stamp, Tattoo and Stencil) work like tabs. The first press makes the image. Pressing it again later shows that image straight away, without calling a model. ↩ Original goes back to the image before any style.
+  * The style buttons (Monet, Dalí, Picasso, 8-bit, EGA, Photo, Watercolour, Hand drawn, Sketch, Lithograph, Rubber stamp, Tattoo, Stencil and Anime) work like tabs. The first press makes the image. Pressing it again later shows that image straight away, without calling a model. ↩ Original goes back to the image before any style.
   * Before a style is applied, a cheap text model removes words that fight it, so a "photorealistic" prompt loses that word when you press Picasso. Then a short phrase such as "in the style of Pablo Picasso" is added.
   * While an image is being made, the pressed button shows ⏳ in green and the caption says what is happening. The other buttons just say "still painting" until it's done. If it fails, the previous caption and buttons come back.
   * Image variations do not get buttons.

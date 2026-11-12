@@ -4,9 +4,10 @@ The images themselves stay in Telegram: we keep only each image's file_id, so sw
 earlier image is a single edit with no upload. A record looks like:
 
     {'prompt': 'a red fox in snow', 'command': 'flux', 'current': 'monet',
-     'images': {'_': {'file_id': ..., 'caption': ...}, 'monet': {...}}}
+     'images': {'_': {'file_id': ..., 'caption': ..., 'base': ...}, 'monet': {...}}}
 
-'_' is the image with no style. Backends: SQLite (self-hosted, standard library only) and DynamoDB (Lambda).
+'_' is the image with no style. 'base' is the prompt after any expansion and cleanup, before the style
+phrase is added, so Remix can reuse it and skip the text model. Backends: SQLite (self-hosted, standard library only) and DynamoDB (Lambda).
 Storage problems are logged and never stop the bot from generating images.
 """
 import json
@@ -63,10 +64,10 @@ class SqliteStore:
 		finally:
 			db.close()
 
-	def save_image(self, chat_id, message_id, prompt, command, style, file_id, caption):
+	def save_image(self, chat_id, message_id, prompt, command, style, file_id, caption, base=None):
 		def change(record):
 			record = record or {'prompt': prompt, 'command': command, 'images': {}}
-			record['images'][key(style)] = {'file_id': file_id, 'caption': caption}
+			record['images'][key(style)] = {'file_id': file_id, 'caption': caption, 'base': base}
 			record['current'] = key(style)
 			return record
 		self._modify(chat_id, message_id, change)
@@ -94,7 +95,7 @@ class DynamoStore:
 			return None
 		return {'prompt': item['prompt'], 'command': item['command'], 'current': item['current'], 'images': item['images']}
 
-	def save_image(self, chat_id, message_id, prompt, command, style, file_id, caption):
+	def save_image(self, chat_id, message_id, prompt, command, style, file_id, caption, base=None):
 		from botocore.exceptions import ClientError
 		id = self._id(chat_id, message_id)
 		expires = int(time.time()) + self.days * 86400 # DynamoDB TTL deletes the item after this
@@ -107,7 +108,7 @@ class DynamoStore:
 		self.table.update_item(Key={'id': id},
 			UpdateExpression='SET images.#k = :image, #cur = :k, #ttl = :ttl',
 			ExpressionAttributeNames={'#k': key(style), '#cur': 'current', '#ttl': 'ttl'},
-			ExpressionAttributeValues={':image': {'file_id': file_id, 'caption': caption}, ':k': key(style), ':ttl': expires})
+			ExpressionAttributeValues={':image': {'file_id': file_id, 'caption': caption, 'base': base}, ':k': key(style), ':ttl': expires})
 
 	def set_current(self, chat_id, message_id, style):
 		self.table.update_item(Key={'id': self._id(chat_id, message_id)},
@@ -137,8 +138,8 @@ def _safely(operation, default, *args):
 def get(chat_id, message_id):
 	return _safely('get', None, chat_id, message_id)
 
-def save_image(chat_id, message_id, prompt, command, style, file_id, caption):
-	return _safely('save_image', None, chat_id, message_id, prompt, command, style, file_id, caption)
+def save_image(chat_id, message_id, prompt, command, style, file_id, caption, base=None):
+	return _safely('save_image', None, chat_id, message_id, prompt, command, style, file_id, caption, base)
 
 def set_current(chat_id, message_id, style):
 	return _safely('set_current', None, chat_id, message_id, style)

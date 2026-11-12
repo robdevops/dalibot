@@ -13,6 +13,7 @@ STYLES = {
 	'stamp':       ('Rubber stamp', 'as a rubber stamp print'),
 	'tattoo':      ('Tattoo', 'as a tattoo design'),
 	'stencil':     ('Stencil', 'as stencil art'),
+	'anime':       ('Anime', 'as anime art'),
 }
 
 import unicodedata

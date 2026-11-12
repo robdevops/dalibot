@@ -145,22 +145,33 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 			if len(message.split()) >= MIN_PROMPT_WORDS or is_button:
 				typing.start()
 				pending.start()
-				if len(message.split()) < MIN_PROMPT_WORDS: # only reachable from a button press
-					# a button press on a very short prompt: have the text model flesh it out so it still works
-					message = openrouter.expand(message, MIN_PROMPT_WORDS)
-					print("Expanded short prompt:", message)
-				print("Sending prompt to OpenRouter:", model, style or "")
-				styled = message
-				if style in STYLES:
-					# a cheap text model removes words that fight the style; we then append a short style phrase
-					cue = STYLES[style][1]
-					styled = with_style(openrouter.remix(message, cue) or message, style, fix=openrouter.fix_style)
+				style_key = style if style in STYLES else ''
+				# 'base' is the prompt after any expansion and cleanup, before the style phrase is added
+				base = None
+				if style_key and edit_message_id and pending.button and pending.button['action'] == 'r':
+					# Remix of a styled image: the cleanup would give the same answer again, so reuse the saved result
+					saved = ((store.get(chat_id, edit_message_id) or {}).get('images', {}).get(style_key) or {}).get('base')
+					if saved:
+						base = saved
+						print("Remix: reusing the saved prompt, no text model call")
+				if not base:
+					if len(message.split()) < MIN_PROMPT_WORDS: # only reachable from a button press
+						# a button press on a very short prompt: have the text model flesh it out so it still works
+						message = openrouter.expand(message, MIN_PROMPT_WORDS)
+						print("Expanded short prompt:", message)
+					base = message
+					if style_key:
+						# a cheap text model removes words that fight the style
+						base = openrouter.remix(message, STYLES[style_key][1]) or message
+				print("Sending prompt to OpenRouter:", model, style_key)
+				styled = base
+				if style_key: # then we append a short style phrase
+					styled = with_style(base, style_key, fix=openrouter.fix_style)
 					print("Styled prompt:", styled)
 				success, image_url = openrouter.generate(styled, model)
 				if success:
 					print("Sending result to Telegram")
 					caption = styled # show the prompt that was actually used
-					style_key = style if style in STYLES else ''
 					keyboard = telegram.imageKeyboard(command, style_key)
 					# Button presses replace the image in place; if that fails, post a new one instead
 					sent = False
@@ -177,7 +188,7 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 						sent = telegram.sendPhoto(chat_id, image_url, caption, message_id, reply_markup=keyboard)
 					if sent and sent['message_id'] and sent['file_id']:
 						# remember the image (by Telegram file_id) so the buttons can switch back to it
-						store.save_image(chat_id, sent['message_id'], prompt, command, style_key, sent['file_id'], caption)
+						store.save_image(chat_id, sent['message_id'], prompt, command, style_key, sent['file_id'], caption, base)
 					if config_archive:
 						image_bytesio = download_file(image_url)
 						filename = config_archive_dir + '/image_' + str(now) + '.' + image_type(image_url)[0]
