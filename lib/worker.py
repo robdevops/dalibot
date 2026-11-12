@@ -2,6 +2,7 @@
 
 import io
 import re
+import concurrent.futures
 import time
 from sys import stderr
 import threading
@@ -110,6 +111,11 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 			message = prompt
 			if len(message):
 				message = 'Variation of ' + message
+			variations = 2 if debug else 4
+			# have the text model pick a style and a viewpoint for each image while the picture is downloaded and prepared, so it adds no waiting
+			looks_job = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+			looks_future = looks_job.submit(openrouter.variation_looks, note, variations)
+			looks_job.shutdown(wait=False)
 			print("Downloading from telegram")
 			image_url = telegram.getFileURL(file_id)
 			if not image_url:
@@ -122,8 +128,7 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 				error_to_telegram(chat_id, message, message_id)
 				return
 			print("Uploading image to OpenRouter")
-			variations = 2 if debug else 4
-			success, image_url = openrouter.variations(image_data, note, variations, model)
+			success, image_url = openrouter.variations(image_data, note, variations, model, looks_future.result())
 			if success:
 				print("Sending result to Telegram")
 				if cropped:

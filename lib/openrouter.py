@@ -1,6 +1,7 @@
-import urllib.request, urllib.error, socket, json, base64, concurrent.futures
+import urllib.request, urllib.error, socket, json, base64, concurrent.futures, random, re
 from sys import stderr
 from lib.config import *
+from lib.styles import STYLES
 
 URL = 'https://openrouter.ai/api/v1/images'
 CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions'
@@ -143,30 +144,90 @@ def generate(prompt, model=None):
 	"""Text to image. Returns (True, image_bytes) or (False, error message)."""
 	return _request({'prompt': prompt}, model)
 
-# Asking a model for "a variation" tends to return near copies, so each image is told to change something
-# specific. With four images, each of these two directions is used twice (the two images of one direction
-# still differ from each other, because image models are not deterministic).
-VARIATION_TWISTS = [
-	"reinterpret it in a different style and with a different mood",
-	"show it from a different viewpoint with a different composition, and reinterpret it with a different mood and artistic treatment",
+# Asking a model for "a variation" tends to return near copies. So each image is told to be redrawn in its own,
+# specific style AND shown from its own viewpoint, chosen to be as different from the others as possible. The cheap
+# text model invents them (it can't see the picture, but it doesn't need to); if it fails we use our own lists.
+VARIATION_LOOKS_INSTRUCTIONS = (
+	"You plan several different versions of one picture for an AI image generator. "
+	"Reply with a JSON array of exactly {number} objects, each with a \"style\" and a \"viewpoint\". "
+	"A style is 3 to 10 words that fit after 'redraw it', for example \"as a Japanese ukiyo-e woodblock print\" or "
+	"\"in the style of a 1950s travel poster\". A viewpoint is 2 to 10 words that fit after 'shown', for example "
+	"\"from directly above\", \"as an extreme close-up, head-on\" or \"from far away, tiny in a wide scene\". "
+	"Make every style different from the others (different media, eras, techniques and colour treatments, such as a painting, "
+	"a photograph, a 3D render, a graphic or pixel style) and every viewpoint different from the others. Never repeat one. "
+	"Reply with only the JSON array."
+)
+
+# used when the text model can't be asked or answers badly
+FALLBACK_VIEWPOINTS = [
+	"from directly above", "looking up from far below", "in profile, from the side", "as an extreme close-up, head-on",
+	"from far away, small in a wide scene", "from behind", "from a three-quarter front view",
 ]
 
-def variation_prompt(note, twist):
-	prompt = "Create a bold, clearly different variation of this image. Keep the main subject recognisable, but " + twist + ". Do not simply copy or lightly retouch the original."
+def variation_looks(note, number):
+	"""number (style, viewpoint) pairs, e.g. ('as a ukiyo-e woodblock print', 'from directly above'), each different from the
+	others. Asks the cheap text model; any style or viewpoint that is missing, repeated or unusable is replaced from
+	our own lists, one at a time, so a good half is never thrown away with a bad one. Never fails."""
+	styles, viewpoints = [], []
+	same = lambda a, b: a.casefold() == b.casefold()
+	def usable(text, among):
+		return 2 <= len(text.split()) <= 14 and '\n' not in text and not any(same(text, other) for other in among if other)
+	try:
+		text = _ask(VARIATION_LOOKS_INSTRUCTIONS.format(number=number), f"The user's note about the picture, which may be empty: {note or '(none)'}", 400, 1.0)
+		found = re.search(r'\[.*\]', text, re.S)
+		for item in json.loads(found.group(0) if found else text)[:number]:
+			style = str(item.get('style', '') if isinstance(item, dict) else item).strip().strip('"').strip()
+			viewpoint = str(item.get('viewpoint', '') if isinstance(item, dict) else '').strip().strip('"').strip()
+			styles.append(style if usable(style, styles) else None)
+			viewpoints.append(viewpoint if usable(viewpoint, viewpoints) else None)
+	except Exception as e:
+		print("Style suggestions failed, using our own lists:", repr(e), file=stderr)
+	styles += [None] * (number - len(styles))
+	viewpoints += [None] * (number - len(viewpoints))
+	left_styles = [cue for label, cue in STYLES.values() if not any(s and same(cue, s) for s in styles)]
+	left_views = [v for v in FALLBACK_VIEWPOINTS if not any(w and same(v, w) for w in viewpoints)]
+	random.shuffle(left_styles)
+	random.shuffle(left_views)
+	for i in range(number):
+		if styles[i] is None:
+			styles[i] = left_styles.pop()
+		if viewpoints[i] is None:
+			viewpoints[i] = left_views.pop() if left_views else random.choice(FALLBACK_VIEWPOINTS)
+	return list(zip(styles, viewpoints))
+
+def variation_prompt(note, look):
+	style, viewpoint = look
+	prompt = f"Create a bold, clearly different variation of this image. Keep the main subject recognisable, but redraw it {style}, shown {viewpoint}. Do not simply copy or lightly retouch the original."
 	return prompt + f" The user's note about what they want: {note}" if note else prompt
 
-def variations(image_bytes, note, number=4, model=None):
-	"""Ask for variations of an image, each in a different direction. note is what the user wrote, if anything.
-	One request per image, because many models cap n at 1. Returns (True, image_bytes or [image_bytes...]) or (False, error message)."""
+def variations(image_bytes, note, number=4, model=None, looks=None):
+	"""Ask for variations of an image, each with its own style and viewpoint. note is what the user wrote, if anything.
+	looks can be supplied (from variation_looks, possibly fetched earlier in parallel). One request per image, because many
+	models cap n at 1. Returns (True, image_bytes or [image_bytes...]) or (False, error message)."""
+	looks = looks or variation_looks(note, number)
 	data_url = 'data:image/png;base64,' + base64.b64encode(image_bytes).decode()
 	reference = [{'type': 'image_url', 'image_url': {'url': data_url}}]
-	bodies = [{'prompt': variation_prompt(note, VARIATION_TWISTS[i % len(VARIATION_TWISTS)]), 'input_references': reference} for i in range(number)]
+	bodies = [{'prompt': variation_prompt(note, looks[i]), 'input_references': reference} for i in range(number)]
 	with concurrent.futures.ThreadPoolExecutor(max_workers=number) as executor:
 		results = list(executor.map(lambda body: _request(body, model), bodies))
 	images = [image for ok, image in results if ok]
 	if not images:
 		return results[0]
 	return True, images[0] if len(images) == 1 else images
+
+def _ask(system, user, max_tokens, temperature):
+	"""One call to the cheap text model. Returns its reply, or raises."""
+	body = {'model': config_openrouter_text_model, 'messages': [{'role': 'system', 'content': system}, {'role': 'user', 'content': user}],
+		'max_tokens': max_tokens, 'temperature': temperature}
+	req = urllib.request.Request(CHAT_URL, data=json.dumps(body).encode(), method='POST')
+	req.add_header('Content-Type', 'application/json')
+	req.add_header('Authorization', 'Bearer ' + (config_openrouter_api_key or ''))
+	try:
+		with urllib.request.urlopen(req, timeout=20) as r:
+			return json.load(r)['choices'][0]['message']['content'].strip()
+	except urllib.error.HTTPError as e:
+		e.close()
+		raise
 
 def _request(body, model=None):
 	body = dict(body, model=model or config_openrouter_image_model, aspect_ratio='1:1')
