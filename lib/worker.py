@@ -48,9 +48,9 @@ class Typing:
 		self.stopped.set()
 
 class Pending:
-	"""While a button press is being worked on, show it on the message: the pressed button gets an hourglass
-	and the native green style, and the caption says what is happening. If we end up not replacing the
-	image (an error, or we had to post a new message instead), put the previous caption and buttons back."""
+	"""While a button press is being worked on, show it on the buttons: the pressed one gets an hourglass and
+	the native green style. The image and caption stay as they are until the new image replaces them. If we end
+	up not replacing the image (an error, or we had to post a new message instead), put the previous buttons back."""
 	def __init__(self, chat_id, message_id, command, button):
 		self.chat_id, self.message_id, self.command, self.button = chat_id, message_id, command, button
 		self.thread = None
@@ -62,14 +62,7 @@ class Pending:
 			self.thread.start()
 
 	def _show(self):
-		target = self.button['target']
-		if self.button['action'] == 'r':
-			line = "\u23F3 Remixing\u2026"
-		elif target:
-			line = "\u23F3 Painting in the style of " + STYLES[target][0] + "\u2026"
-		else:
-			line = "\u23F3 Generating\u2026"
-		telegram.editCaption(self.chat_id, self.message_id, line, telegram.imageKeyboard(self.command, self.button['style'], pending=(self.button['action'], target)))
+		telegram.editButtons(self.chat_id, self.message_id, telegram.imageKeyboard(self.command, self.button['style'], pending=(self.button['action'], self.button['target'])))
 
 	def wait(self):
 		if self.thread:
@@ -78,7 +71,7 @@ class Pending:
 	def finish(self):
 		if self.thread and not self.replaced:
 			self.wait()
-			telegram.editCaption(self.chat_id, self.message_id, self.button['caption'], telegram.imageKeyboard(self.command, self.button['style']))
+			telegram.editButtons(self.chat_id, self.message_id, telegram.imageKeyboard(self.command, self.button['style']))
 
 def process_request(service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id=False, style=None, edit_message_id=None, button=None):
 	typing = Typing(service, chat_id)

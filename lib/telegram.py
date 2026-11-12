@@ -111,19 +111,17 @@ def imageKeyboard(command, style='', pending=None):
 		first_row.append(button('\u21A9 Original', ''))
 	return {'inline_keyboard': [first_row] + rows}
 
-def editCaption(chat_id, message_id, caption, reply_markup=None):
-	"""Change just the caption and buttons of one of our photo messages. Returns True on success."""
-	url = webhooks['telegram'] + "editMessageCaption"
-	fields = {'chat_id': chat_id, 'message_id': int(message_id), 'caption': caption}
-	if reply_markup:
-		fields['reply_markup'] = reply_markup
+def editButtons(chat_id, message_id, reply_markup):
+	"""Change just the buttons under one of our photo messages, leaving the image and caption alone. Returns True on success."""
+	url = webhooks['telegram'] + "editMessageReplyMarkup"
+	fields = {'chat_id': chat_id, 'message_id': int(message_id), 'reply_markup': reply_markup}
 	req = urllib.request.Request(url, json.dumps(fields).encode('utf-8'), {'Content-type': 'application/json'}, method='POST')
 	try:
 		urllib.request.urlopen(req, timeout=config_http_timeout)
 	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
 		if isinstance(e, urllib.error.HTTPError):
 			e.close()
-		print("Telegram editMessageCaption failed:", str(e), file=stderr)
+		print("Telegram editMessageReplyMarkup failed:", str(e), file=stderr)
 		return False
 	return True
 

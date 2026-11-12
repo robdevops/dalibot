@@ -30,7 +30,7 @@ Telegram chat bot for AI image generation, powered by [OpenRouter](https://openr
   * 🔄 Remix generates again with the same model, prompt and style.
   * The style buttons (Monet, Dalí, Picasso, 8-bit, EGA, Photo, Watercolour, Hand drawn, Sketch, Lithograph, Rubber stamp, Tattoo, Stencil, Anime, Van Gogh, Oil painting, Cartoon, Comic book, 3D render, Pop art, Cyberpunk, Ukiyo-e and Black & white) work like tabs. The first press makes the image. Pressing it again later shows that image straight away, without calling a model. ↩ Original goes back to the image before any style.
   * Before a style is applied, a cheap text model removes words that fight it, so a "photorealistic" prompt loses that word when you press Picasso. Then a short phrase such as "in the style of Pablo Picasso" is added.
-  * While an image is being made, the pressed button shows ⏳ in green and the caption says what is happening. The other buttons just say "still painting" until it's done. If it fails, the previous caption and buttons come back.
+  * While an image is being made, the pressed button shows ⏳ in green, and the image and caption stay as they were until the new one replaces them. The other buttons just say "still painting" until it's done. If it fails, the previous buttons come back.
   * Image variations do not get buttons.
   * The bot keeps a small record of each image message (the prompt and Telegram file ids, not the images) in SQLite when self-hosted or DynamoDB on Lambda. See the setup guides.
 * The bot only responds in group chats, unless you set `TELEGRAM_ALLOWED_USER_IDS` (user ids, or `all`)

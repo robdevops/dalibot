@@ -233,7 +233,7 @@ def parseTelegramCallback(query):
 	print("[Telegram button]:", user, command, style, prompt)
 	# what to show while this is generated, and what to put back if it fails
 	before = (record["current"] if record else style if action == "r" else "").replace(store.BASE, "")
-	button = {'action': action, 'target': style, 'style': before, 'caption': msg.get("caption") or ""}
+	button = {'action': action, 'target': style, 'style': before}
 	return chat_id, user, userRealName, '/' + command + ' ' + prompt, chat_type, reply_to_id, False, style or None, message_id, button
 
 def poll():
