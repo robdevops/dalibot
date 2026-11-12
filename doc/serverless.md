@@ -148,7 +148,7 @@ aws dynamodb create-table --table-name dalibot --attribute-definitions Attribute
 aws dynamodb update-time-to-live --table-name dalibot --time-to-live-specification Enabled=true,AttributeName=ttl
 ```
 
-Then let the function use it. In the Lambda function go to _Configuration > Permissions_, open the execution role, and add an inline policy (replace the region and account number):
+Then let the function use it. In the Lambda function go to _Configuration > Permissions_ and click the role name under _Execution role_ (it opens in the IAM console). On the role's _Permissions_ tab choose _Add permissions > Create inline policy_, switch to the _JSON_ editor, paste this (replace the region and account number with yours, which you can see in the function's ARN), then choose _Next_, name it (for example `dalibot-dynamodb`) and _Create policy_:
 ```
 {
     "Version": "2012-10-17",
