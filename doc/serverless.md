@@ -16,6 +16,7 @@ Go to the [Lambda console](https://console.aws.amazon.com/lambda/home)
   * Hit _Save_
 * Go to the _Configuration_ tab
   * Go to _General configuration_ and _Edit_
+    * **Memory:** `512` MB (the bot holds each image in memory several times over; a 2 MB image used 110 of the default 128 MB)
     * **Timeout:** `1` min
     * Hit _Save_
 

@@ -119,9 +119,14 @@ def editButtons(chat_id, message_id, reply_markup):
 	try:
 		urllib.request.urlopen(req, timeout=config_http_timeout)
 	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
+		detail = ''
 		if isinstance(e, urllib.error.HTTPError):
+			try:
+				detail = e.read().decode()[:300]
+			except Exception:
+				pass
 			e.close()
-		print("Telegram editMessageReplyMarkup failed:", str(e), file=stderr)
+		print(f"Telegram editMessageReplyMarkup failed for chat {chat_id} message {message_id}:", str(e), detail, file=stderr)
 		return False
 	return True
 
@@ -156,7 +161,7 @@ def editPhoto(chat_id, message_id, photo, caption, reply_markup=None):
 			except Exception:
 				pass
 			e.close()
-		print("Telegram editMessageMedia failed:", str(e), detail, file=stderr)
+		print(f"Telegram editMessageMedia failed for chat {chat_id} message {message_id}:", str(e), detail, file=stderr)
 		return False
 	print("200 OK Telegram editMessageMedia", caption)
 	return photoInfo(r)

@@ -255,7 +255,7 @@ def parseTelegramCallback(query):
 	# reply to the original prompt message if it still exists
 	reply_to = msg.get("reply_to_message", {}).get("message_id")
 	reply_to_id = str(reply_to) if reply_to else None
-	print("[Telegram button]:", user, command, style, prompt)
+	print("[Telegram button]:", user, command, style, prompt, f"(on message {message_id} in a {chat_type} chat {chat_id})")
 	# what to show while this is generated, and what to put back if it fails
 	before = (record["current"] if record else style if action == "r" else "").replace(store.BASE, "")
 	button = {'action': action, 'target': style, 'style': before}
