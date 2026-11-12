@@ -32,6 +32,7 @@ image_models = {
 }
 image_models[config_telegramBotCommand] = (config_openrouter_image_model, 'the default model')
 config_openrouter_text_model = _str('OPENROUTER_TEXT_MODEL', 'meta-llama/llama-3.1-8b-instruct') # cheap model that rewrites prompts for styles
+MIN_BUTTON_WORDS = 4 # button presses on shorter prompts get them expanded by the text model
 config_image_timeout = int(_str('DALIBOT_IMAGE_TIMEOUT', 120))
 config_slackOAuthToken = _str('SLACK_OAUTH_TOKEN')
 config_slackOutgoingToken = _str('SLACK_OUTGOING_TOKEN')

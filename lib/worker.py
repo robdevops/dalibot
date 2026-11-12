@@ -106,6 +106,10 @@ def _process_request(typing, service, chat_id, user, message, botName, userRealN
 			message = prompt # the prompt as the user wrote it; it is also the caption, so buttons can regenerate from it
 			if len(message.split()) > 2 or style or edit_message_id: # a button press already passed this check once
 				typing.start()
+				if len(message.split()) < MIN_BUTTON_WORDS:
+					# a button press on a very short prompt: have the text model flesh it out so it still works
+					message = openrouter.expand(message, MIN_BUTTON_WORDS)
+					print("Expanded short prompt:", message)
 				print("Sending prompt to OpenRouter:", model, style or "")
 				styled = message
 				if style in STYLES:

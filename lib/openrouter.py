@@ -52,6 +52,39 @@ def only_removes_few_words(original, edited):
 	remaining = iter(a)
 	return all(word in remaining for word in b) # each edited word must appear in order in the original
 
+EXPAND_INSTRUCTIONS = (
+	"You expand very short prompts for an AI image generator. Add a few concrete details about the setting, "
+	"lighting or composition so the prompt has at least {min_words} words, and keep the original subject. "
+	"Do not add any art style, medium or photographic terms. Reply with only the expanded prompt, under 25 words."
+)
+
+def expand(prompt, min_words):
+	"""Lengthen a very short prompt so a button press can still produce an image.
+	Uses the cheap text model; if that fails, falls back to fixed wording, so this never fails."""
+	body = {
+		'model': config_openrouter_text_model,
+		'messages': [
+			{'role': 'system', 'content': EXPAND_INSTRUCTIONS.format(min_words=min_words)},
+			{'role': 'user', 'content': prompt},
+		],
+		'max_tokens': 100,
+		'temperature': 0.7,
+	}
+	req = urllib.request.Request(CHAT_URL, data=json.dumps(body).encode(), method='POST')
+	req.add_header('Content-Type', 'application/json')
+	req.add_header('Authorization', 'Bearer ' + (config_openrouter_api_key or ''))
+	try:
+		with urllib.request.urlopen(req, timeout=20) as r:
+			text = json.load(r)['choices'][0]['message']['content'].strip().strip('"').strip()
+		if min_words <= len(text.split()) <= 40:
+			return text
+		print("Prompt expansion returned an unusable result:", repr(text), file=stderr)
+	except Exception as e:
+		if isinstance(e, urllib.error.HTTPError):
+			e.close()
+		print("Prompt expansion failed:", repr(e), file=stderr)
+	return 'A detailed picture of ' + prompt
+
 def generate(prompt, model=None):
 	"""Text to image. Returns (True, image_bytes) or (False, error message)."""
 	return _request({'prompt': prompt}, model)

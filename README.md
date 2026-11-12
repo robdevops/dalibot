@@ -14,7 +14,7 @@ Telegram chat bot for AI image generation, powered by [OpenRouter](https://openr
 * Minimal dependencies outside the Python Standard Library. There are none if you run it serverless and only use the text prompt feature.
 
 # Usage
-* The prompt must be three or more words (four or more to use the Remix and style buttons)
+* The prompt must be three or more words
 * The prompt must begin with a command, or @mention the bot if it has admin access in the group. Each command uses a different model:
 
 | Command | Model | Notes |
