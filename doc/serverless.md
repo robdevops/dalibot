@@ -137,9 +137,8 @@ The bot remembers each image message's prompt and the images made for it (as Tel
 In the [DynamoDB console](https://console.aws.amazon.com/dynamodbv2/home) choose _Create table_ and set:
   * **Table name:** `dalibot` (or set `DALIBOT_TABLE` to your name)
   * **Partition key:** `id`, type _String_
-  * **Table settings:** _Customize settings_
 
-Leave everything else as it is and choose _Create table_. Then open the table's _Additional settings_ and turn on _Time to live_ with the attribute name `ttl`. Old records then delete themselves (after 90 days; change with `DALIBOT_STORE_DAYS`).
+Leave _Table settings_ on _Default settings_ (DynamoDB Standard, On-demand capacity, no indexes) and choose _Create table_. Then open the table's _Additional settings_ and turn on _Time to live_ with the attribute name `ttl`. Old records then delete themselves (after 90 days; change with `DALIBOT_STORE_DAYS`).
 
 Or with the AWS CLI:
 ```
