@@ -116,7 +116,7 @@ def _process_request(typing, service, chat_id, user, message, botName, userRealN
 				success, image_url = openrouter.generate(styled, model)
 				if success:
 					print("Sending result to Telegram")
-					caption = message + ('\n\nStyle: ' + STYLES[style][0] if style in STYLES else '')
+					caption = styled # show the prompt that was actually used
 					telegram.sendPhoto(chat_id, image_url, caption, reply_markup=telegram.imageKeyboard(command, style if style in STYLES else ''))
 					if config_archive:
 						image_bytesio = download_file(image_url)

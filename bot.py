@@ -143,6 +143,22 @@ def parseTelegram(inbound):
 		return
 	return chat_id, user, userRealName, message, chat_type, message_id, file_id, None
 
+def originalPrompt(msg):
+	"""Recover the prompt a button's image was made from. The caption shows the prompt actually used
+	(which may be cleaned up and styled), so prefer the user's original message that the image replies to."""
+	original = msg.get("reply_to_message") or {}
+	text = original.get("text") or original.get("caption")
+	if text:
+		command, prompt, addressed = worker.parse_command(text, botName)
+		if addressed and prompt:
+			return prompt
+	# the original message is gone: undo what we added to the caption
+	caption = re.sub(r"\n\nStyle: .*$", "", msg.get("caption") or "", flags=re.S) # captions from older versions
+	for label, cue in STYLES.values():
+		if caption.endswith(", " + cue):
+			return caption[:-len(", " + cue)]
+	return caption
+
 def parseTelegramCallback(query):
 	"""A press of a button under an image: generate again with a model and style.
 	callback_data is 'g:<command>:<style>'. The prompt is the photo's caption, so nothing is stored."""
@@ -157,7 +173,7 @@ def parseTelegramCallback(query):
 	command, style = parts[1], parts[2]
 	telegram.answerCallbackQuery(query["id"], "Generating again..." if not style else "Painting in the style of " + STYLES[style][0] + "...")
 	msg = query["message"]
-	prompt = re.sub(r"\n\nStyle: .*$", "", msg.get("caption") or "", flags=re.S) # drop the style line to recover the prompt
+	prompt = originalPrompt(msg)
 	if not prompt:
 		return
 	sender = query["from"]
