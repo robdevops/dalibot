@@ -25,6 +25,7 @@ Telegram chat bot for AI image generation, powered by [OpenRouter](https://openr
 | `/qwen` | `qwen/qwen-image-2.1-turbo` | |
 
 * The same commands work in a photo's caption to get variations from that model. In a group you can also reply to any picture (including one the bot made) with `@botname`, or with a bare command such as `/flux`, to get variations of it. Anything you add is passed along as a note, for example `@botname make it winter`.
+* Editing a message to tag the bot (or to start with a command) works as if you had just sent it. That includes adding the tag to a photo's caption or changing a prompt. Edits that don't tag the bot are ignored.
 * `/credits` (also `/tokens`, `/usage` and `/cost`) shows what the bot's OpenRouter API key has spent today, this week and this month, using OpenRouter's own totals. If `TELEGRAM_ALLOWED_USER_IDS` lists user ids, only those users can ask.
 * Each generated image has buttons under it. Every button replaces the image in place:
   * 🔄 Remix generates again with the same model, prompt and style.

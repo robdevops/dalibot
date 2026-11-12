@@ -10,7 +10,7 @@ def setWebhook():
 	params = {}
 	params['url'] = config_telegramOutgoingWebhook
 	#params['url'] = '' # unsubscribe
-	params['allowed_updates'] = json.dumps(['message', 'callback_query'])
+	params['allowed_updates'] = json.dumps(['message', 'edited_message', 'callback_query'])
 	params['drop_pending_updates'] = True
 	params['secret_token'] = config_telegramOutgoingToken
 	data = urllib.parse.urlencode(params).encode()
@@ -36,7 +36,7 @@ def deleteWebhook():
 def getUpdates(offset=None, poll_timeout=50):
 	"""Long poll for new messages. Returns a list (possibly empty), or None on error."""
 	url = webhooks['telegram'] + 'getUpdates'
-	data = {'timeout': poll_timeout, 'allowed_updates': ['message', 'callback_query']}
+	data = {'timeout': poll_timeout, 'allowed_updates': ['message', 'edited_message', 'callback_query']}
 	if offset is not None:
 		data['offset'] = offset
 	req = urllib.request.Request(url, json.dumps(data).encode(), {'Content-type': 'application/json'}, method='POST')

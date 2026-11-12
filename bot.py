@@ -133,9 +133,12 @@ def parseTelegram(inbound):
 	user = userRealName = ''
 	if "callback_query" in inbound:
 		return parseTelegramCallback(inbound["callback_query"])
-	if "message" not in inbound:
+	# An edited message arrives as its own kind of update. We only react to an edit that tags the bot (or is a command),
+	# so fixing a typo in an ordinary message does nothing.
+	edited = "message" not in inbound and "edited_message" in inbound
+	if "message" not in inbound and not edited:
 		return
-	msg = inbound["message"]
+	msg = inbound["edited_message"] if edited else inbound["message"]
 	message_id = str(msg["message_id"])
 	chat_id = str(msg["chat"]["id"])
 	user_id = str(msg["from"]["id"])
@@ -155,6 +158,9 @@ def parseTelegram(inbound):
 		message = msg["text"]
 		print("[Telegram]:", user, message)
 		command, prompt, addressed = worker.parse_command(message, botName)
+		if edited and (not addressed or command in CREDITS_COMMANDS):
+			print("[Telegram edit]: not addressed to the bot, ignoring")
+			return
 		if command in CREDITS_COMMANDS and (addressed or chat_type == "private"):
 			replyCredits(chat_id, user_id, message_id)
 			return
@@ -168,6 +174,9 @@ def parseTelegram(inbound):
 		message = msg.get("caption", '')
 		file_id = msg["photo"][-1]["file_id"]
 		print("[Telegram photo]:", user, message)
+		if edited and not worker.parse_command(message, botName)[2]:
+			print("[Telegram edit]: not addressed to the bot, ignoring")
+			return
 	elif "document" in msg:
 		mime_type = msg["document"]["mime_type"]
 		message = msg.get("caption", '')
@@ -176,6 +185,9 @@ def parseTelegram(inbound):
 			return
 		file_id = msg["document"]["file_id"]
 		print("[Telegram document]:", user, mime_type, message)
+		if edited and not worker.parse_command(message, botName)[2]:
+			print("[Telegram edit]: not addressed to the bot, ignoring")
+			return
 	else:
 		print("[telegram]: unhandled message without text/photo/document")
 		return
