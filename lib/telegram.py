@@ -89,7 +89,8 @@ def imageKeyboard(command, style=''):
 	"""Buttons under an image. callback_data is 'g:<command>:<style>': generate again with that model and style."""
 	def button(text, style_key):
 		return {'text': text, 'callback_data': f'g:{command}:{style_key}'}
-	styles = [button(label, key) for key, (label, _) in STYLES.items()]
+	# tick the style this image was made with
+	styles = [button(('\u2713 ' if key == style else '') + label, key) for key, (label, _) in STYLES.items()]
 	return {'inline_keyboard': [[button('\U0001F504 Reload', style)], styles[:3], styles[3:]]}
 
 def sendPhoto(chat_id, photo_url, caption, message_id=None, reply_markup=None):
