@@ -91,6 +91,7 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 		print("Detected inbound photo")
 		if addressed or chat_type == 'private':
 			typing.start()
+			note = prompt # what the user wrote with the photo, if anything
 			message = prompt
 			if len(message):
 				message = 'Variation of ' + message
@@ -107,16 +108,15 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 				return
 			print("Uploading image to OpenRouter")
 			variations = 2 if debug else 4
-			prompt = message if message else 'Create a variation of this image'
-			success, image_url = openrouter.variations(image_data, prompt, variations, model)
+			success, image_url = openrouter.variations(image_data, note, variations, model)
 			if success:
 				print("Sending result to Telegram")
 				if cropped:
 					message = message + "\nNote: I centre-cropped your non-square image before sending it to the image model"
 				if isinstance(image_url, list):
-					telegram.sendMediaGroup(chat_id, image_url, message)
+					telegram.sendMediaGroup(chat_id, image_url, message, message_id) # one album, so the chat isn't flooded
 				else:
-					telegram.sendPhoto(chat_id, image_url, message)
+					telegram.sendPhoto(chat_id, image_url, message, message_id)
 				if config_archive:
 					if isinstance(image_url, list):
 						for idx, url in enumerate(image_url):

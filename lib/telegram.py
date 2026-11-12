@@ -205,39 +205,55 @@ def photoInfo(response):
 	except (ValueError, KeyError, IndexError, TypeError):
 		return {'message_id': None, 'file_id': None}
 
-def sendMediaGroup(chat_id, url_list, caption, message_id=None):
-	if any(isinstance(item, bytes) for item in url_list):
-		# albums can't carry uploaded bytes in a JSON request: send them one by one
-		for idx, item in enumerate(url_list):
-			sendPhoto(chat_id, item, caption if idx == 0 else '', message_id)
-		return
-	media = []
-	for idx, image_url in enumerate(url_list):
-		if idx == 0:
-			media.append({'type': 'photo', 'media': image_url, 'caption': caption})
+ALBUM_MAX = 10 # Telegram albums hold 2 to 10 photos
+
+def sendMediaGroup(chat_id, items, caption, message_id=None):
+	"""Send photos as one album. items are URLs, file_ids or image bytes (uploaded). The caption goes on the first photo.
+	Albums can't carry buttons. Returns True if everything was sent."""
+	items = list(items)
+	if len(items) == 1:
+		return bool(sendPhoto(chat_id, items[0], caption, message_id))
+	if len(items) > ALBUM_MAX: # more than one album's worth: several albums, one caption
+		return all([sendMediaGroup(chat_id, items[i:i + ALBUM_MAX], caption if i == 0 else '', message_id) for i in range(0, len(items), ALBUM_MAX)])
+	media, files = [], {}
+	for idx, item in enumerate(items):
+		entry = {'type': 'photo'}
+		if isinstance(item, bytes):
+			name = f'photo{idx}'
+			ext, mime = multipart.image_type(item)
+			files[name] = (f'{name}.{ext}', mime, item)
+			entry['media'] = 'attach://' + name
 		else:
-			media.append({'type': 'photo', 'media': image_url})
-	url = webhooks['telegram'] + "sendMediaGroup?chat_id=" + str(chat_id)
-	data = {
-	'disable_notification': 'true',
-	'chat_id': chat_id,
-	'media': media,
-	"allow_sending_without_reply": True,
-	"reply_to_message_id": message_id
-	}
-	data = json.dumps(data).encode('utf-8')
-	req = urllib.request.Request(url, data, method='POST')
-	req.add_header('Content-type', 'application/json')
-	try:
-		r = urllib.request.urlopen(req, timeout=config_http_timeout)
-	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
-		print("Failure executing request:", url, data, str(e))
-		return False
-	if r.code == 200:
-		print(r.code, "OK Telegram sendMediaGroup", caption)
+			entry['media'] = item
+		if idx == 0 and caption:
+			entry['caption'] = caption
+		media.append(entry)
+	url = webhooks['telegram'] + "sendMediaGroup"
+	fields = {'chat_id': chat_id, 'media': media, 'disable_notification': True, 'allow_sending_without_reply': True}
+	if message_id:
+		fields['reply_to_message_id'] = message_id
+	if files:
+		fields = {k: (json.dumps(v) if isinstance(v, list) else str(v).lower() if isinstance(v, bool) else v) for k, v in fields.items()}
+		content_type, data = multipart.encode(fields, files)
+		headers = {'Content-type': content_type}
 	else:
-		print(r.code, "error Telegram sendMediaGroup", caption)
+		data = json.dumps(fields).encode('utf-8')
+		headers = {'Content-type': 'application/json'}
+	req = urllib.request.Request(url, data, headers, method='POST')
+	try:
+		urllib.request.urlopen(req, timeout=config_http_timeout)
+	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
+		detail = ''
+		if isinstance(e, urllib.error.HTTPError):
+			try:
+				detail = e.read().decode()[:300]
+			except Exception:
+				pass
+			e.close()
+		print("Telegram sendMediaGroup failed:", str(e), detail, file=stderr)
 		return False
+	print("200 OK Telegram sendMediaGroup", len(items), "photos;", caption)
+	return True
 
 def getFileURL(file_id):
 	url = webhooks['telegram'] + "getFile"

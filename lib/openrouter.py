@@ -143,13 +143,27 @@ def generate(prompt, model=None):
 	"""Text to image. Returns (True, image_bytes) or (False, error message)."""
 	return _request({'prompt': prompt}, model)
 
-def variations(image_bytes, prompt, number=4, model=None):
-	"""Ask for variations of an image. One request per image, because many models cap n at 1.
-	Returns (True, image_bytes or [image_bytes...]) or (False, error message)."""
+# Asking a model for "a variation" tends to return near copies, so each image is told to change something
+# different. Four requests, four directions: together they come out clearly unlike the original and each other.
+VARIATION_TWISTS = [
+	"change the composition and the camera angle",
+	"change the colour palette and the lighting",
+	"change the setting, the season or the time of day",
+	"reinterpret it with a different mood and a different artistic treatment",
+]
+
+def variation_prompt(note, twist):
+	prompt = "Create a bold, clearly different variation of this image. Keep the main subject recognisable, but " + twist + ". Do not simply copy or lightly retouch the original."
+	return prompt + f" The user's note about what they want: {note}" if note else prompt
+
+def variations(image_bytes, note, number=4, model=None):
+	"""Ask for variations of an image, each in a different direction. note is what the user wrote, if anything.
+	One request per image, because many models cap n at 1. Returns (True, image_bytes or [image_bytes...]) or (False, error message)."""
 	data_url = 'data:image/png;base64,' + base64.b64encode(image_bytes).decode()
-	body = {'prompt': prompt, 'input_references': [{'type': 'image_url', 'image_url': {'url': data_url}}]}
+	reference = [{'type': 'image_url', 'image_url': {'url': data_url}}]
+	bodies = [{'prompt': variation_prompt(note, VARIATION_TWISTS[i % len(VARIATION_TWISTS)]), 'input_references': reference} for i in range(number)]
 	with concurrent.futures.ThreadPoolExecutor(max_workers=number) as executor:
-		results = list(executor.map(lambda _: _request(body, model), range(number)))
+		results = list(executor.map(lambda body: _request(body, model), bodies))
 	images = [image for ok, image in results if ok]
 	if not images:
 		return results[0]
