@@ -213,6 +213,39 @@ def storeOnly(msg, chat_id, message_id):
 		telegram.sendMessage(chat_id, "Sorry, that picture could not be saved to the image history.", message_id)
 	return True
 
+DELETE = re.compile(r'(?<!\w)#delete(?!\w)', re.IGNORECASE)
+
+def mayDelete(chat_id, user_id, chat_type):
+	"""Deleting is for the users listed by id in TELEGRAM_ALLOWED_USER_IDS ("all" does not count) and,
+	in a group, for that group's owner and administrators."""
+	return user_id in config_telegramAllowedUserIDs or (chat_type != "private" and telegram.isChatAdmin(chat_id, user_id))
+
+def deletePicture(msg, chat_id, user_id, chat_type, message_id):
+	"""A reply of #delete to a picture removes that picture's record from the image history, with every style made
+	for it, so a gallery no longer shows it. The messages in the chat are left alone. Returns True if msg was such a reply."""
+	target = msg.get("reply_to_message")
+	if not target or not DELETE.search(msg.get("text") or msg.get("caption") or ""):
+		return False
+	if not mayDelete(chat_id, user_id, chat_type):
+		print(user_id, "is not allowed to delete pictures. Ignoring.", file=stderr)
+		telegram.sendMessage(chat_id, "Sorry, only the bot's approved users and this group's admins can delete pictures.", message_id)
+		return True
+	# a picture is recorded under its message, or under its file when it was added by forwarding it to the bot
+	record_ids = [str(target["message_id"])]
+	if target.get("photo"):
+		record_ids.append('f' + target["photo"][-1]["file_unique_id"])
+	for record_id in record_ids:
+		count = store.forget(chat_id, record_id)
+		if count is None:
+			telegram.sendMessage(chat_id, "Sorry, that picture could not be deleted from the image history.", message_id)
+			return True
+		if count:
+			print("[Telegram #delete]: removed", count, "image(s) of record", record_id)
+			telegram.sendMessage(chat_id, "Deleted from the image history" + (f" ({count} images)." if count > 1 else "."), message_id)
+			return True
+	telegram.sendMessage(chat_id, "That picture is not in the image history.", message_id)
+	return True
+
 def parseTelegram(inbound):
 	"""Extract what the worker needs from a Telegram update. Returns None if it should be ignored."""
 	file_id = False
@@ -245,6 +278,8 @@ def parseTelegram(inbound):
 	if not edited:
 		msg = withAlbumCaption(msg, chat_id)
 	if storeOnly(msg, chat_id, message_id):
+		return
+	if not edited and deletePicture(msg, chat_id, user_id, chat_type, message_id):
 		return
 	if "text" in msg:
 		message = msg["text"]

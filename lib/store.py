@@ -92,6 +92,13 @@ class SqliteStore:
 	def import_image(self, chat_id, record_id, caption, command, file_id, created):
 		self._modify(chat_id, record_id, lambda _: imported_record(caption, command, file_id, created))
 
+	def forget(self, chat_id, record_id):
+		db = self._connect()
+		try:
+			db.execute('DELETE FROM messages WHERE chat_id=? AND message_id=?', (str(chat_id), str(record_id)))
+		finally:
+			db.close()
+
 	def describe(self):
 		db = self._connect()
 		try:
@@ -138,6 +145,12 @@ class DynamoStore:
 		self.table.put_item(Item={'id': self._id(chat_id, record_id), 'ttl': int(time.time()) + self.days * 86400,
 			**imported_record(caption, command, file_id, created)})
 
+	def forget(self, chat_id, record_id):
+		# The bot's permissions on the table do not include deleting. So the record is emptied and marked as already
+		# expired: anything reading the table skips a record with no images, and DynamoDB's TTL removes the item.
+		self.table.put_item(Item={'id': self._id(chat_id, record_id), 'prompt': '', 'command': '', 'current': '', 'images': {},
+			'ttl': int(time.time()) - 1})
+
 	def describe(self):
 		self.get('check', 'check') # a read, which fails if the table, region or permissions are wrong
 		return f"DynamoDB table '{self.table.name}' in {self.table.meta.client.meta.region_name} (reads work)"
@@ -183,6 +196,17 @@ def save_image(chat_id, message_id, prompt, command, style, file_id, caption, ba
 
 def set_current(chat_id, message_id, style):
 	return _safely('set_current', None, chat_id, message_id, style)
+
+def forget(chat_id, record_id):
+	"""Remove a record and every image in it. Returns how many images it held: 0 if there was no such record
+	(or it held none), None if the store could not be read or changed."""
+	record = _safely('get', False, chat_id, record_id)
+	if record is False:
+		return None
+	count = len(record['images']) if record else 0
+	if count and _safely('forget', False, chat_id, record_id) is False:
+		return None
+	return count
 
 def remember_album(chat_id, album, caption):
 	"""Note the caption of an album, so that the album's other pictures, which arrive as separate messages
