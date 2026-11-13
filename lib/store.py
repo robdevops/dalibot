@@ -118,7 +118,7 @@ class DynamoStore:
 
 	def get(self, chat_id, message_id):
 		item = self.table.get_item(Key={'id': self._id(chat_id, message_id)}).get('Item')
-		if not item:
+		if not item or int(item.get('ttl', 0)) < time.time(): # an expired item (a deleted record is one) may linger until DynamoDB removes it
 			return None
 		return {'prompt': item['prompt'], 'command': item['command'], 'current': item['current'], 'images': item['images']}
 
@@ -128,7 +128,8 @@ class DynamoStore:
 		expires = int(time.time()) + self.days * 86400 # DynamoDB TTL deletes the item after this
 		try: # create the record the first time we see this message
 			self.table.put_item(Item={'id': id, 'prompt': prompt, 'command': command, 'current': key(style), 'images': {}, 'ttl': expires},
-				ConditionExpression='attribute_not_exists(id)')
+				ConditionExpression='attribute_not_exists(id) OR #ttl < :now', # an expired item (a deleted record) is replaced, not added to
+				ExpressionAttributeNames={'#ttl': 'ttl'}, ExpressionAttributeValues={':now': int(time.time())})
 		except ClientError as e:
 			if e.response['Error']['Code'] != 'ConditionalCheckFailedException':
 				raise
@@ -210,7 +211,7 @@ def forget(chat_id, record_id):
 
 def remember_album(chat_id, album, caption):
 	"""Note the caption of an album, so that the album's other pictures, which arrive as separate messages
-	with no caption of their own, can be treated the same way. It is a record with no images."""
+	with no caption of their own, know what it was. It is a record with no images."""
 	return _safely('put', False, chat_id, 'g' + str(album), {'prompt': caption, 'command': '', 'current': '', 'images': {}}) is not False
 
 def album_caption(chat_id, album):

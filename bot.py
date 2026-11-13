@@ -168,36 +168,43 @@ def withAlbumCaption(msg, chat_id):
 	if not album or not imageFileId(msg):
 		return msg
 	caption = msg.get("caption") or ""
-	if STORE_ONLY.search(caption) or worker.UPSCALE.search(caption):
-		store.remember_album(chat_id, album, caption)
-		return msg
+	tagged = lambda text: STORE_ONLY.search(text) or worker.UPSCALE.search(text)
 	if caption:
+		# noted whether it is tagged or not, so the album's other pictures stop waiting as soon as it has been seen
+		store.remember_album(chat_id, album, caption)
 		return msg
 	waited = 0
 	while True:
 		inherited = store.album_caption(chat_id, album)
-		if inherited or polling or waited >= ALBUM_WAIT:
+		if inherited is not None or polling or waited >= ALBUM_WAIT:
 			break
-		time.sleep(0.5)
-		waited += 0.5
-	if not inherited:
+		time.sleep(1)
+		waited += 1
+	if not inherited or not tagged(inherited):
 		return msg
 	print("[Telegram album]: using the caption of another picture in the album")
 	return dict(msg, caption=inherited)
 
 STORE_ONLY = re.compile(r'(?<!\w)#storeonly(?!\w)', re.IGNORECASE)
 
-def storeOnly(msg, chat_id, message_id):
+MAX_STORED_FILE = 20 * 1024 * 1024 # Telegram lets a bot (and so a gallery) download files up to 20 MB
+
+def storeOnly(msg, chat_id, message_id, edited=False):
 	"""A picture posted with #storeonly in its caption is added to the image history as it is, so that a gallery
 	can show it. Nothing is generated. Returns True if msg was such a post (also when it could not be saved).
-	The record belongs to the message, so editing the caption stores it again in the same place."""
+	An edit of such a post does nothing: otherwise editing the caption would put back a picture that was deleted."""
 	caption = msg.get("caption") or ""
 	if not STORE_ONLY.search(caption):
 		return False
+	if edited:
+		return True
 	document = msg.get("document") or {}
 	if msg.get("photo"):
 		file_id = msg["photo"][-1]["file_id"] # the largest size
 	elif document.get("mime_type") == "image/jpeg":
+		if not 0 < document.get("file_size", 0) <= MAX_STORED_FILE:
+			telegram.sendMessage(chat_id, "That file is too large to save: #storeonly takes files up to 20 MB.", message_id)
+			return True
 		file_id = document["file_id"]
 	elif document:
 		telegram.sendMessage(chat_id, "#storeonly needs a photo, or a JPEG sent as a file.", message_id)
@@ -224,7 +231,7 @@ def deletePicture(msg, chat_id, user_id, chat_type, message_id):
 	"""A reply of #delete to a picture removes that picture's record from the image history, with every style made
 	for it, so a gallery no longer shows it. The messages in the chat are left alone. Returns True if msg was such a reply."""
 	target = msg.get("reply_to_message")
-	if not target or not DELETE.search(msg.get("text") or msg.get("caption") or ""):
+	if not target or not imageFileId(target) or not DELETE.search(msg.get("text") or msg.get("caption") or ""):
 		return False
 	if not mayDelete(chat_id, user_id, chat_type):
 		print(user_id, "is not allowed to delete pictures. Ignoring.", file=stderr)
@@ -234,16 +241,22 @@ def deletePicture(msg, chat_id, user_id, chat_type, message_id):
 	record_ids = [str(target["message_id"])]
 	if target.get("photo"):
 		record_ids.append('f' + target["photo"][-1]["file_unique_id"])
+	total = 0
 	for record_id in record_ids:
 		count = store.forget(chat_id, record_id)
 		if count is None:
 			telegram.sendMessage(chat_id, "Sorry, that picture could not be deleted from the image history.", message_id)
 			return True
-		if count:
-			print("[Telegram #delete]: removed", count, "image(s) of record", record_id)
-			telegram.sendMessage(chat_id, "Deleted from the image history" + (f" ({count} images)." if count > 1 else "."), message_id)
-			return True
-	telegram.sendMessage(chat_id, "That picture is not in the image history.", message_id)
+		total += count
+	sender = target.get("from") or {}
+	if botName and sender.get("is_bot") and '@' + sender.get("username", "").lower() == telegram.botName.lower():
+		# one of our own pictures: take its buttons away, or the next press would make and record a new image
+		telegram.editButtons(chat_id, target["message_id"], {'inline_keyboard': []})
+	if total:
+		print("[Telegram #delete]: removed", total, "image(s)")
+		telegram.sendMessage(chat_id, "Deleted from the image history" + (f" ({total} images)." if total > 1 else "."), message_id)
+	else:
+		telegram.sendMessage(chat_id, "That picture is not in the image history.", message_id)
 	return True
 
 def parseTelegram(inbound):
@@ -277,9 +290,9 @@ def parseTelegram(inbound):
 			return
 	if not edited:
 		msg = withAlbumCaption(msg, chat_id)
-	if storeOnly(msg, chat_id, message_id):
+	if storeOnly(msg, chat_id, message_id, edited):
 		return
-	if not edited and deletePicture(msg, chat_id, user_id, chat_type, message_id):
+	if deletePicture(msg, chat_id, user_id, chat_type, message_id): # for an edited reply too: deleting twice does no harm
 		return
 	if "text" in msg:
 		message = msg["text"]

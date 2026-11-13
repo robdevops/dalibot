@@ -48,8 +48,12 @@ def upscale_picture(typing, chat_id, message_id, file_id, prompt, command, model
 	if not success:
 		return error_to_telegram(chat_id, image or "The image model returned nothing.", message_id)
 	sent = telegram.sendPhoto(chat_id, image, caption or None, message_id)
-	if sent and sent['message_id'] and sent['file_id']:
+	if not sent:
+		return error_to_telegram(chat_id, "The picture was redrawn, but sending it to Telegram failed. Please try again.", message_id)
+	if sent['message_id'] and sent['file_id']:
 		store.save_image(chat_id, sent['message_id'], caption, command, None, sent['file_id'], caption)
+	else:
+		print("The upscaled picture was posted but could not be added to the image history", file=stderr)
 	if cropped:
 		telegram.sendMessage(chat_id, "Note: I centre-cropped your non-square image before sending it to the image model", message_id)
 
@@ -305,8 +309,8 @@ def prepare_image(image_url):
 	if width != height:
 		print("Cropping to center while preserving shortest edge")
 		crop = min(width, height)
-		left = int(crop/2-crop/2)
-		upper = int(crop/2-crop/2)
+		left = (width - crop) // 2
+		upper = (height - crop) // 2
 		right = left + crop
 		lower = upper + crop
 		im_cropped = im.crop((left, upper, right, lower))
