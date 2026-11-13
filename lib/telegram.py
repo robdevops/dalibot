@@ -305,6 +305,18 @@ def sendMessage(chat_id, message, message_id=None):
 		print(r.code, "error Telegram sendMessage", message)
 		return False
 
+def setMessageReaction(chat_id, message_id, emoji):
+	"""Put an emoji reaction on a message: a quiet acknowledgement that adds nothing to the chat."""
+	url = webhooks['telegram'] + "setMessageReaction"
+	data = json.dumps({'chat_id': chat_id, 'message_id': int(message_id), 'reaction': [{'type': 'emoji', 'emoji': emoji}]}).encode('utf-8')
+	req = urllib.request.Request(url, data, {'Content-type': 'application/json'}, method='POST')
+	try:
+		r = urllib.request.urlopen(req, timeout=config_http_timeout)
+	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
+		print("Failure executing request:", url, data, str(e))
+		return False
+	return r.code == 200
+
 def setMyCommands():
 	url = webhooks['telegram'] + "setMyCommands"
 	headers = {'Content-type': 'application/json'}

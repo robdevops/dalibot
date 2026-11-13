@@ -23,6 +23,12 @@ BASE = '_' # key for the unstyled image (DynamoDB does not allow empty attribute
 def key(style):
 	return style or BASE
 
+def imported_record(caption, command, file_id, created):
+	"""The record for a picture made before the history existed. 'created' is when Telegram says it was
+	first sent (epoch seconds), so a gallery can show it in its real place instead of as new."""
+	return {'prompt': caption, 'command': command, 'current': BASE,
+		'images': {BASE: {'file_id': file_id, 'caption': caption, 'base': None}}, 'created': created}
+
 class SqliteStore:
 	def __init__(self, path, days):
 		self.path = path
@@ -83,6 +89,9 @@ class SqliteStore:
 	def put(self, chat_id, message_id, record):
 		self._modify(chat_id, message_id, lambda _: record)
 
+	def import_image(self, chat_id, record_id, caption, command, file_id, created):
+		self._modify(chat_id, record_id, lambda _: imported_record(caption, command, file_id, created))
+
 	def describe(self):
 		db = self._connect()
 		try:
@@ -124,6 +133,10 @@ class DynamoStore:
 	def put(self, chat_id, message_id, record):
 		self.table.put_item(Item={'id': self._id(chat_id, message_id), 'prompt': record['prompt'], 'command': record['command'],
 			'current': record['current'], 'images': record['images'], 'ttl': int(time.time()) + self.days * 86400})
+
+	def import_image(self, chat_id, record_id, caption, command, file_id, created):
+		self.table.put_item(Item={'id': self._id(chat_id, record_id), 'ttl': int(time.time()) + self.days * 86400,
+			**imported_record(caption, command, file_id, created)})
 
 	def describe(self):
 		self.get('check', 'check') # a read, which fails if the table, region or permissions are wrong
@@ -170,6 +183,11 @@ def save_image(chat_id, message_id, prompt, command, style, file_id, caption, ba
 
 def set_current(chat_id, message_id, style):
 	return _safely('set_current', None, chat_id, message_id, style)
+
+def import_image(chat_id, record_id, caption, command, file_id, created):
+	"""Record a picture that was made before the history existed. Saving the same record_id again replaces it.
+	Returns False if it could not be saved."""
+	return _safely('import_image', False, chat_id, record_id, caption, command, file_id, created) is not False
 
 def carry_over(chat_id, old_message_id, new_message_id, current=None):
 	"""Copy a message's saved images to another message, for when the old one can't be edited and a new one is posted.

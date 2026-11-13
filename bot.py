@@ -129,6 +129,30 @@ def imageFileId(msg):
 	if document.get("mime_type", "").startswith("image/"):
 		return document["file_id"]
 
+def forwardedFromThisBot(msg):
+	"""When this bot first sent the message that msg is a forward of (epoch seconds), or None if msg is not
+	a forward of one of this bot's own messages."""
+	origin = msg.get("forward_origin") or {}
+	sender = origin.get("sender_user") if origin.get("type") == "user" else msg.get("forward_from") # forward_from: Bot API before 7.0
+	if not sender or not sender.get("is_bot") or not botName or '@' + sender.get("username", "").lower() != botName.lower():
+		return None
+	return origin.get("date") or msg.get("forward_date")
+
+def importForwarded(msg, chat_id, message_id):
+	"""One of this bot's own pictures, forwarded to it in a private chat, is added to the image history so that
+	pictures made before the history existed can be recorded. Nothing is generated. Returns True if msg was one.
+	The record is named after the file, so forwarding the same picture twice does not add it twice."""
+	created = forwardedFromThisBot(msg)
+	if not created or not msg.get("photo"):
+		return False
+	photo = msg["photo"][-1] # the largest size
+	print("[Telegram forward of our own picture]: adding it to the image history")
+	if store.import_image(chat_id, 'f' + photo["file_unique_id"], msg.get("caption", ""), config_telegramBotCommand, photo["file_id"], int(created)):
+		telegram.setMessageReaction(chat_id, message_id, "👍")
+	else:
+		telegram.sendMessage(chat_id, "Sorry, that picture could not be saved to the image history.", message_id)
+	return True
+
 def parseTelegram(inbound):
 	"""Extract what the worker needs from a Telegram update. Returns None if it should be ignored."""
 	file_id = False
@@ -155,6 +179,8 @@ def parseTelegram(inbound):
 			print(user, userRealName, user_id, "is whitelisted for private message")
 		else:
 			print(user, userRealName, user_id, "is not whitelisted. Ignoring.", file=stderr)
+			return
+		if not edited and importForwarded(msg, chat_id, message_id):
 			return
 	if "text" in msg:
 		message = msg["text"]
