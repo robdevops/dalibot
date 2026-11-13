@@ -387,6 +387,18 @@ def sendMessage(chat_id, message, message_id=None):
 		print(r.code, "error Telegram sendMessage", message)
 		return False
 
+def setMessageReaction(chat_id, message_id, emoji):
+	"""Put an emoji reaction on a message: a quiet acknowledgement that adds nothing to the chat."""
+	url = webhooks['telegram'] + "setMessageReaction"
+	data = json.dumps({'chat_id': chat_id, 'message_id': int(message_id), 'reaction': [{'type': 'emoji', 'emoji': emoji}]}).encode('utf-8')
+	req = urllib.request.Request(url, data, {'Content-type': 'application/json'}, method='POST')
+	try:
+		r = urllib.request.urlopen(req, timeout=config_http_timeout)
+	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
+		print("Failure executing request:", url, data, str(e))
+		return False
+	return r.code == 200
+
 def setMyCommands():
 	url = webhooks['telegram'] + "setMyCommands"
 	headers = {'Content-type': 'application/json'}
@@ -394,6 +406,8 @@ def setMyCommands():
 	for name, (model, description) in image_models.items():
 		if name != config_telegramBotCommand:
 			commands.append({'command': name, 'description': 'same, using ' + description})
+	for alias, name in COMMAND_ALIASES.items():
+		commands.append({'command': alias, 'description': 'same as /' + name})
 	commands.append({'command': CREDITS_COMMANDS[0], 'description': 'show what has been spent on OpenRouter: today, week, month'})
 	data = {'commands': commands}
 	data = json.dumps(data).encode('utf-8')
