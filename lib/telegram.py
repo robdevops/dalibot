@@ -395,7 +395,7 @@ def setMessageReaction(chat_id, message_id, emoji):
 	try:
 		r = urllib.request.urlopen(req, timeout=config_http_timeout)
 	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
-		print("Failure executing request:", url, data, str(e))
+		print("Failure executing request:", redact(url), redact(data), str(e))
 		return False
 	return r.code == 200
 
