@@ -30,21 +30,24 @@ def without_mention(text, botName):
 	return re.sub(r'\s+([,.;:!?])', r'\1', text) # "a fox @bot, please" -> "a fox, please"
 
 UPSCALE = re.compile(r'(?<!\w)#upscale(?!\w)', re.IGNORECASE)
+STRICT = re.compile(r'(?<!\w)#strict(?!\w)', re.IGNORECASE)
 
-def upscale_picture(typing, chat_id, message_id, file_id, prompt, command, model):
-	"""A picture posted with #upscale in its caption: have the image model redraw it at full size, post the result
-	and add it to the image history under the rest of the caption. The small original is not kept."""
+def without_tag(tag, text):
+	return re.sub(r'\s+', ' ', tag.sub(' ', text)).strip()
+
+def redraw_picture(typing, chat_id, message_id, file_id, caption, command, what, redraw):
+	"""Send the user's picture to the image model with redraw(image_data), post the one image that comes back with
+	caption, and add it to the image history under caption. The user's own picture is not kept."""
 	typing.start()
-	caption = re.sub(r'\s+', ' ', UPSCALE.sub(' ', prompt)).strip() # the tag is not part of the caption
-	print("Detected a picture to upscale; downloading from telegram")
+	print(f"Detected a picture to {what}; downloading from telegram")
 	image_url = telegram.getFileURL(file_id)
 	if not image_url:
 		return error_to_telegram(chat_id, "error fetching image from Telegram", message_id)
 	success, cropped, image_data = prepare_image(image_url)
 	if not success:
 		return error_to_telegram(chat_id, image_data, message_id)
-	print("Uploading image to OpenRouter to be upscaled")
-	success, image = openrouter.upscale(image_data, model)
+	print(f"Uploading image to OpenRouter to {what}")
+	success, image = redraw(image_data)
 	if not success:
 		return error_to_telegram(chat_id, image or "The image model returned nothing.", message_id)
 	sent = telegram.sendPhoto(chat_id, image, caption or None, message_id)
@@ -53,9 +56,23 @@ def upscale_picture(typing, chat_id, message_id, file_id, prompt, command, model
 	if sent['message_id'] and sent['file_id']:
 		store.save_image(chat_id, sent['message_id'], caption, command, None, sent['file_id'], caption)
 	else:
-		print("The upscaled picture was posted but could not be added to the image history", file=stderr)
+		print(f"The picture ({what}) was posted but could not be added to the image history", file=stderr)
 	if cropped:
 		telegram.sendMessage(chat_id, "Note: I centre-cropped your non-square image before sending it to the image model", message_id)
+
+def upscale_picture(typing, chat_id, message_id, file_id, prompt, command, model):
+	"""A picture posted with #upscale in its caption: have the image model redraw it at full size, post the result
+	and add it to the image history under the rest of the caption. The small original is not kept."""
+	caption = without_tag(UPSCALE, prompt) # the tag is not part of the caption
+	redraw_picture(typing, chat_id, message_id, file_id, caption, command, 'upscale', lambda image: openrouter.upscale(image, model))
+
+def strict_picture(typing, chat_id, message_id, file_id, prompt, command, model):
+	"""A picture posted with #strict and an instruction in its caption: one image of that picture changed as the
+	instruction says, with none of the extra styles and viewpoints that variations add."""
+	note = without_tag(STRICT, prompt)
+	if not note:
+		return error_to_telegram(chat_id, "Add what you want after #strict, for example: #strict make it night time", message_id)
+	redraw_picture(typing, chat_id, message_id, file_id, note, command, 'change as asked', lambda image: openrouter.strict(image, note, model))
 
 def parse_command(message, botName):
 	"""Work out which model a message asks for. Returns (command, prompt, addressed).
@@ -136,6 +153,8 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 	model = image_models[command][0]
 	if file_id and UPSCALE.search(message):
 		upscale_picture(typing, chat_id, message_id, file_id, prompt, command, model)
+	elif file_id and STRICT.search(message):
+		strict_picture(typing, chat_id, message_id, file_id, prompt, command, model)
 	elif file_id:
 		print("Detected inbound photo")
 		if addressed or chat_type == 'private':

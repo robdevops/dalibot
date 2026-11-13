@@ -1,26 +1,21 @@
 # key: (button label, short phrase appended to the prompt)
+# Removing a style leaves its saved images in old records; a press of its button on an old message just refreshes the buttons.
 STYLES = {
 	'monet':       ('Monet', 'in the style of Claude Monet'),
-	'dali':        ('Dalí', 'in the style of Salvador Dalí'),
 	'picasso':     ('Picasso', 'in the style of Pablo Picasso'),
 	'8bit':        ('8-bit', 'as 8-bit pixel art'),
 	'ega':         ('EGA', 'as EGA 16-color pixel art'),
 	'photo':       ('Photo', 'as a photograph'),
 	'watercolour': ('Watercolour', 'as a watercolour painting'),
-	'handdrawn':   ('Hand drawn', 'as a hand drawn illustration'),
-	'sketch':      ('Sketch', 'as a pencil sketch'),
 	'lithograph':  ('Lithograph', 'as a lithograph print'),
 	'stamp':       ('Rubber stamp', 'as a rubber stamp print'),
-	'tattoo':      ('Tattoo', 'as a tattoo design'),
 	'stencil':     ('Stencil', 'as stencil art'),
 	'anime':       ('Anime', 'as anime art'),
 	'vangogh':     ('Van Gogh', 'in the style of Vincent van Gogh'),
-	'oilpainting': ('Oil painting', 'as an oil painting'),
 	'cartoon':     ('Cartoon', 'as a cartoon'),
 	'comicbook':   ('Comic book', 'as a comic book illustration'),
 	'render3d':    ('3D render', 'as a 3D render'),
 	'popart':      ('Pop art', 'as pop art'),
-	'cyberpunk':   ('Cyberpunk', 'as cyberpunk art'),
 	'ukiyoe':      ('Ukiyo-e', 'as a ukiyo-e woodblock print'),
 	'bw':          ('Black & white', 'in black & white'),
 }

@@ -156,7 +156,7 @@ def importForwarded(msg, chat_id, message_id):
 	return True
 
 # Telegram delivers an album as one message per picture, and only one of them carries the caption. When that
-# caption has #storeonly or #upscale, it is noted so the album's other pictures get the same treatment. They
+# caption has #storeonly, #upscale or #strict, it is noted so the album's other pictures get the same treatment. They
 # may reach us before the captioned one has been handled (each webhook call runs on its own), so they wait a
 # little for the note. With long polling messages are handled one after another, so there is nothing to wait for.
 ALBUM_WAIT = 5 # seconds
@@ -168,7 +168,7 @@ def withAlbumCaption(msg, chat_id):
 	if not album or not imageFileId(msg):
 		return msg
 	caption = msg.get("caption") or ""
-	tagged = lambda text: STORE_ONLY.search(text) or worker.UPSCALE.search(text)
+	tagged = lambda text: STORE_ONLY.search(text) or worker.UPSCALE.search(text) or worker.STRICT.search(text)
 	if caption:
 		# noted whether it is tagged or not, so the album's other pictures stop waiting as soon as it has been seen
 		store.remember_album(chat_id, album, caption)
@@ -317,10 +317,12 @@ def parseTelegram(inbound):
 		if command in CREDITS_COMMANDS and (addressed or chat_type == "private"):
 			replyCredits(chat_id, user_id, message_id)
 			return
-		# Tagging the bot (or sending a bare command) in reply to a picture asks for variations of that picture.
-		# A command with a prompt, like "/dream a red fox", stays a text prompt even when it is a reply.
+		# Tagging the bot (or sending a bare command) in reply to a picture asks for variations of that picture,
+		# and a reply with #upscale or #strict works on that picture too. Otherwise a command with a prompt, like
+		# "/dream a red fox", stays a text prompt even when it is a reply.
 		replied_image = imageFileId(msg.get("reply_to_message") or {})
-		if replied_image and addressed and (not prompt or mentions_bot(message, botName)):
+		picture_tag = worker.UPSCALE.search(message) or worker.STRICT.search(message)
+		if replied_image and addressed and (not prompt or mentions_bot(message, botName) or picture_tag):
 			file_id = replied_image
 			print("[Telegram reply to a picture]:", user, message)
 	elif "photo" in msg:
@@ -375,10 +377,14 @@ def parseTelegramCallback(query):
 	if parts[0] == "n": # a button on an image that is still being made
 		telegram.answerCallbackQuery(query["id"], "Still painting, one moment\u2026")
 		return
-	if len(parts) != 3 or parts[0] not in ("g", "r") or parts[1] not in image_models or (parts[2] and parts[2] not in STYLES):
+	if len(parts) != 3 or parts[0] not in ("g", "r") or parts[1] not in image_models:
 		return
 	action, command, style = parts
 	msg = query["message"]
+	if style and style not in STYLES: # a button of a style that has since been removed, on an older message
+		telegram.answerCallbackQuery(query["id"], "That style is no longer offered. The buttons have been updated.")
+		telegram.editButtons(str(msg["chat"]["id"]), str(msg["message_id"]), telegram.imageKeyboard(command))
+		return
 	sender = query["from"]
 	user_id = str(sender["id"])
 	chat_type = msg["chat"]["type"]
