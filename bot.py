@@ -322,7 +322,8 @@ def parseTelegram(inbound):
 		# "/dream a red fox", stays a text prompt even when it is a reply.
 		replied_image = imageFileId(msg.get("reply_to_message") or {})
 		picture_tag = worker.UPSCALE.search(message) or worker.STRICT.search(message)
-		if replied_image and addressed and (not prompt or mentions_bot(message, botName) or picture_tag):
+		# in a private chat the tag alone is enough: there is no one else the reply could be for
+		if replied_image and (addressed or (picture_tag and chat_type == "private")) and (not prompt or mentions_bot(message, botName) or picture_tag):
 			file_id = replied_image
 			print("[Telegram reply to a picture]:", user, message)
 	elif "photo" in msg:
@@ -383,7 +384,13 @@ def parseTelegramCallback(query):
 	msg = query["message"]
 	if style and style not in STYLES: # a button of a style that has since been removed, on an older message
 		telegram.answerCallbackQuery(query["id"], "That style is no longer offered. The buttons have been updated.")
-		telegram.editButtons(str(msg["chat"]["id"]), str(msg["message_id"]), telegram.imageKeyboard(command))
+		chat, message = str(msg["chat"]["id"]), str(msg["message_id"])
+		showing = ((store.get(chat, message) or {}).get("current") or "").replace(store.BASE, "")
+		if showing in STYLES or not showing:
+			keyboard = telegram.imageKeyboard(command, showing)
+		else: # it shows a removed style itself: highlight nothing, keep the way back to the original
+			keyboard = telegram.imageKeyboard(command, original=True)
+		telegram.editButtons(chat, message, keyboard)
 		return
 	sender = query["from"]
 	user_id = str(sender["id"])

@@ -8,6 +8,14 @@ from lib.styles import STYLES
 
 UPLOAD_TIMEOUT = 60 # seconds for a request that uploads an image; a few MB can take a while to reach Telegram's servers
 
+CAPTION_MAX = 1024 # Telegram refuses a photo whose caption is longer
+
+def fit_caption(caption):
+	"""A caption Telegram accepts: long ones (a long prompt or instruction) are cut, so the paid image is still sent."""
+	if isinstance(caption, str) and len(caption) > CAPTION_MAX:
+		return caption[:CAPTION_MAX - 3] + '...'
+	return caption
+
 def redact(text):
 	"""Text for the logs, without the bot token (it is part of every Bot API URL) or the webhook secret."""
 	text = text.decode(errors='replace') if isinstance(text, bytes) else str(text)
@@ -144,13 +152,14 @@ def sendChatAction(chat_id, action='typing'):
 	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout):
 		pass # purely cosmetic
 
-def imageKeyboard(command, style='', pending=None):
+def imageKeyboard(command, style='', pending=None, original=False):
 	"""Buttons under an image. callback_data is '<action>:<command>:<style>'.
 	'g' goes to that style: the image we already made for it if there is one, otherwise a new one.
 	'r' (Remix) always makes a new image in the current style. Both replace the image in place.
 	The style being shown gets Telegram's native blue 'primary' button style.
 	pending=(action, style) shows the keyboard while that button's image is being made: it gets an hourglass and
-	the native green 'success' style, nothing else is highlighted, and every button just says "still working"."""
+	the native green 'success' style, nothing else is highlighted, and every button just says "still working".
+	original=True adds the Original button with no style highlighted: for a message showing a style that has been removed."""
 	def button(text, style_key, selected=False, action='g'):
 		b = {'text': text, 'callback_data': f'{action}:{command}:{style_key}'}
 		if pending:
@@ -164,7 +173,7 @@ def imageKeyboard(command, style='', pending=None):
 	styles = [button(label, key, key == style) for key, (label, _) in STYLES.items()]
 	rows = [styles[i:i + 3] for i in range(0, len(styles), 3)]
 	first_row = [button('\U0001F504 Remix', style, action='r')]
-	if style or (pending and pending == ('g', '')): # a way back to the image before any style was applied
+	if style or original or (pending and pending == ('g', '')): # a way back to the image before any style was applied
 		first_row.append(button('\u21A9 Original', ''))
 	return {'inline_keyboard': [first_row] + rows}
 
@@ -191,7 +200,7 @@ def editPhoto(chat_id, message_id, photo, caption, reply_markup=None):
 	"""Replace the image, caption and buttons of one of our messages in place.
 	photo is image bytes, a URL or a Telegram file_id. Returns {'message_id', 'file_id'} on success, False on failure."""
 	url = webhooks['telegram'] + "editMessageMedia"
-	media = {'type': 'photo', 'caption': caption}
+	media = {'type': 'photo', 'caption': fit_caption(caption)}
 	photo = for_upload(photo)
 	if isinstance(photo, bytes):
 		media['media'] = 'attach://photo'
@@ -231,7 +240,7 @@ def sendPhoto(chat_id, photo_url, caption, message_id=None, reply_markup=None):
 	'disable_notification': 'true',
 	'chat_id': chat_id,
 	'photo': photo_url,
-	'caption': caption,
+	'caption': fit_caption(caption),
 	"allow_sending_without_reply": True,
 	"reply_to_message_id": message_id
 	}
@@ -300,7 +309,7 @@ def sendMediaGroup(chat_id, items, caption, message_id=None):
 		else:
 			entry['media'] = item
 		if captions[idx]:
-			entry['caption'] = captions[idx]
+			entry['caption'] = fit_caption(captions[idx])
 		media.append(entry)
 	url = webhooks['telegram'] + "sendMediaGroup"
 	fields = {'chat_id': chat_id, 'media': media, 'disable_notification': True, 'allow_sending_without_reply': True}
