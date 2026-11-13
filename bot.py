@@ -319,7 +319,7 @@ def main(event):
 			return
 		elif event['headers']['X-Telegram-Bot-Api-Secret-Token'] != config_telegramOutgoingToken:
 			tauth_header = event['headers']['X-Telegram-Bot-Api-Secret-Token']
-			print("Telegram auth expected:", config_telegramOutgoingToken, "got:", tauth_header, file=stderr)
+			print("Telegram auth failed: the X-Telegram-Bot-Api-Secret-Token header doesn't match TELEGRAM_OUTGOING_TOKEN", file=stderr)
 			return
 		parsed = parseTelegram(inbound)
 		if not parsed:
@@ -334,7 +334,7 @@ def main(event):
 			return
 		elif inbound['token'] != config_slackOutgoingToken:
 			print(json.dumps(event['body'], indent=4))
-			print("Slack auth expected:", config_slackOutgoingToken, "got:", inbound['token'], file=stderr)
+			print("Slack auth failed: the token doesn't match SLACK_OUTGOING_TOKEN", file=stderr)
 			return
 		if 'type' in inbound:
 			if inbound['type'] == 'url_verification':

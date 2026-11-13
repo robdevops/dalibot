@@ -1,9 +1,56 @@
 from lib.config import *
 from sys import stderr
 import concurrent.futures
-import urllib.request, urllib.parse, json, socket
+import urllib.request, urllib.parse, json, socket, io, time
 import lib.multipart as multipart
+import lib.deadline as deadline
 from lib.styles import STYLES
+
+UPLOAD_TIMEOUT = 60 # seconds for a request that uploads an image; a few MB can take a while to reach Telegram's servers
+
+def redact(text):
+	"""Text for the logs, without the bot token (it is part of every Bot API URL)."""
+	text = str(text)
+	return text.replace(config_telegramBotToken, '<TELEGRAM_BOT_TOKEN>') if config_telegramBotToken else text
+
+def for_upload(photo):
+	"""Image bytes to upload as a Telegram photo. Telegram turns every photo into a JPEG anyway, so a PNG is sent as a
+	high-quality JPEG instead: several times smaller, so the upload is faster and less likely to time out. Anything else,
+	or if Pillow is missing, is returned unchanged."""
+	if not isinstance(photo, bytes) or multipart.image_type(photo)[0] != 'png':
+		return photo
+	try:
+		from PIL import Image
+		im = Image.open(io.BytesIO(photo))
+		if im.mode in ('RGBA', 'LA', 'P', 'PA'):
+			im = im.convert('RGBA')
+			background = Image.new('RGB', im.size, (255, 255, 255)) # transparency becomes white
+			background.paste(im, mask=im.getchannel('A'))
+			im = background
+		else:
+			im = im.convert('RGB')
+		with io.BytesIO() as out:
+			im.save(out, format='JPEG', quality=92)
+			jpeg = out.getvalue()
+	except Exception as e:
+		print("Sending the PNG unchanged; couldn't convert it to JPEG:", repr(e), file=stderr)
+		return photo
+	print(f"Upload: PNG {len(photo):,} bytes as JPEG {len(jpeg):,} bytes")
+	return jpeg if len(jpeg) < len(photo) else photo
+
+def upload(req, name):
+	"""urlopen for a request that uploads an image: a longer timeout, and one retry if the network fails (not if Telegram
+	answers with an error), as long as the Lambda deadline leaves time for it. Raises like urlopen if both attempts fail."""
+	for attempt in (1, 2):
+		try:
+			return urllib.request.urlopen(req, timeout=deadline.limit(UPLOAD_TIMEOUT))
+		except urllib.error.HTTPError:
+			raise
+		except (urllib.error.URLError, socket.timeout, ConnectionError) as e:
+			if attempt == 2 or deadline.limit(UPLOAD_TIMEOUT) < 10:
+				raise
+			print(f"Telegram {name} failed ({e}), trying once more", file=stderr)
+			time.sleep(1)
 
 def setWebhook():
 	url = webhooks['telegram'] + 'setWebhook'
@@ -18,7 +65,7 @@ def setWebhook():
 	try:
 		r = urllib.request.urlopen(req, timeout=config_http_timeout)
 	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
-		print("Failure executing request:", url, data, str(e))
+		print("Failure executing request:", redact(url), data, str(e))
 		return False
 	print("Registering Telegram webhook:", r.read().decode(), file=stderr)
 
@@ -29,7 +76,7 @@ def deleteWebhook():
 	try:
 		r = urllib.request.urlopen(req, timeout=config_http_timeout)
 	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
-		print("Failure executing request:", url, str(e))
+		print("Failure executing request:", redact(url), str(e))
 		return False
 	print("Removing Telegram webhook (long polling mode):", r.read().decode(), file=stderr)
 
@@ -44,7 +91,7 @@ def getUpdates(offset=None, poll_timeout=50):
 		r = urllib.request.urlopen(req, timeout=poll_timeout + config_http_timeout)
 		return json.load(r)['result']
 	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout, ValueError, KeyError) as e:
-		print("Failure executing request:", url, str(e), file=stderr)
+		print("Failure executing request:", redact(url), str(e), file=stderr)
 		return None
 
 def getMe():
@@ -55,7 +102,7 @@ def getMe():
 	try:
 		r = urllib.request.urlopen(req, timeout=config_http_timeout)
 	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
-		print("Failure executing request:", url, data, str(e))
+		print("Failure executing request:", redact(url), data, str(e))
 		return False
 	if r.code != 200:
 		print(r.code, "error Telegram getMe")
@@ -74,7 +121,7 @@ def answerCallbackQuery(callback_query_id, text=None, alert=False):
 	try:
 		urllib.request.urlopen(req, timeout=config_http_timeout)
 	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
-		print("Failure executing request:", url, str(e), file=stderr)
+		print("Failure executing request:", redact(url), str(e), file=stderr)
 		return False
 
 def sendChatAction(chat_id, action='typing'):
@@ -135,6 +182,7 @@ def editPhoto(chat_id, message_id, photo, caption, reply_markup=None):
 	photo is image bytes, a URL or a Telegram file_id. Returns {'message_id', 'file_id'} on success, False on failure."""
 	url = webhooks['telegram'] + "editMessageMedia"
 	media = {'type': 'photo', 'caption': caption}
+	photo = for_upload(photo)
 	if isinstance(photo, bytes):
 		media['media'] = 'attach://photo'
 		fields = {'chat_id': chat_id, 'message_id': message_id, 'media': json.dumps(media)}
@@ -152,8 +200,8 @@ def editPhoto(chat_id, message_id, photo, caption, reply_markup=None):
 		headers = {'Content-type': 'application/json'}
 	req = urllib.request.Request(url, data, headers, method='POST')
 	try:
-		r = urllib.request.urlopen(req, timeout=config_http_timeout)
-	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
+		r = upload(req, 'editMessageMedia')
+	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout, ConnectionError) as e:
 		detail = ''
 		if isinstance(e, urllib.error.HTTPError):
 			try:
@@ -179,6 +227,7 @@ def sendPhoto(chat_id, photo_url, caption, message_id=None, reply_markup=None):
 	}
 	if reply_markup:
 		data['reply_markup'] = reply_markup
+	photo_url = data['photo'] = for_upload(photo_url)
 	if isinstance(photo_url, bytes):
 		# image data rather than a URL: upload it
 		del data['photo']
@@ -190,9 +239,9 @@ def sendPhoto(chat_id, photo_url, caption, message_id=None, reply_markup=None):
 		data = json.dumps(data).encode('utf-8')
 	req = urllib.request.Request(url, data, headers)
 	try:
-		r = urllib.request.urlopen(req, timeout=config_http_timeout)
-	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
-		print("Failure executing request:", url, str(e))
+		r = upload(req, 'sendPhoto')
+	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout, ConnectionError) as e:
+		print("Failure executing request:", redact(url), str(e), file=stderr)
 		return False
 	if r.code == 200:
 		print(r.code, "OK Telegram sendPhoto", caption)
@@ -232,6 +281,7 @@ def sendMediaGroup(chat_id, items, caption, message_id=None):
 	media, files = [], {}
 	for idx, item in enumerate(items):
 		entry = {'type': 'photo'}
+		item = for_upload(item)
 		if isinstance(item, bytes):
 			name = f'photo{idx}'
 			ext, mime = multipart.image_type(item)
@@ -255,8 +305,8 @@ def sendMediaGroup(chat_id, items, caption, message_id=None):
 		headers = {'Content-type': 'application/json'}
 	req = urllib.request.Request(url, data, headers, method='POST')
 	try:
-		r = urllib.request.urlopen(req, timeout=config_http_timeout)
-	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
+		r = upload(req, 'sendMediaGroup')
+	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout, ConnectionError) as e:
 		detail = ''
 		if isinstance(e, urllib.error.HTTPError):
 			try:
@@ -294,7 +344,7 @@ def getFileURL(file_id):
 	try:
 		r = urllib.request.urlopen(req, timeout=config_http_timeout)
 	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
-		print("Failure executing request:", url, data.decode(), str(e))
+		print("Failure executing request:", redact(url), data.decode(), str(e))
 		return False
 	if r.code != 200:
 		print(r.code, "error Telegram getFileURL")
@@ -319,7 +369,7 @@ def sendMessage(chat_id, message, message_id=None):
 	try:
 		r = urllib.request.urlopen(req, timeout=config_http_timeout)
 	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
-		print("Failure executing request:", url, data, str(e))
+		print("Failure executing request:", redact(url), data, str(e))
 		return False
 	if r.code == 200:
 		print(r.code, "OK Telegram sendMessage", message)
@@ -341,7 +391,7 @@ def setMyCommands():
 	try:
 		r = urllib.request.urlopen(req, timeout=config_http_timeout)
 	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
-		print("Failure executing request:", url, data, str(e))
+		print("Failure executing request:", redact(url), data, str(e))
 		return False
 	if not r.code == 200:
 		print(r.code, "error Telegram setMyCommands")
