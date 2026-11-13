@@ -134,9 +134,11 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 				print("Sending result to Telegram")
 				captions = variation_captions(message, result[2], cropped)
 				if isinstance(image_url, list):
-					telegram.sendMediaGroup(chat_id, image_url, captions, message_id) # one album, so the chat isn't flooded
+					sent = telegram.sendMediaGroup(chat_id, image_url, captions, message_id) # one album, so the chat isn't flooded
 				else:
-					telegram.sendPhoto(chat_id, image_url, captions[0], message_id)
+					sent = telegram.sendPhoto(chat_id, image_url, captions[0], message_id)
+					sent = [sent] if sent else []
+				store.save_variations(chat_id, note, command, sent, captions) # so a gallery can find them
 				if config_archive:
 					if isinstance(image_url, list):
 						for idx, url in enumerate(image_url):

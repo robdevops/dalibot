@@ -7,7 +7,12 @@ earlier image is a single edit with no upload. A record looks like:
      'images': {'_': {'file_id': ..., 'caption': ..., 'base': ...}, 'monet': {...}}}
 
 '_' is the image with no style. 'base' is the prompt after any expansion and cleanup, before the style
-phrase is added, so Remix can reuse it and skip the text model. Backends: SQLite (self-hosted, standard library only) and DynamoDB (Lambda).
+phrase is added, so Remix can reuse it and skip the text model.
+
+Each photo of a variations album (made from a photo the user sent) gets its own record too, so a gallery can find them:
+'kind' is 'variation', 'prompt' is what the user wrote with their photo (may be empty), and the one image is under '_'
+with that photo's caption (its style and viewpoint). Albums have no buttons, so the bot itself never reads these back.
+Backends: SQLite (self-hosted, standard library only) and DynamoDB (Lambda).
 Storage problems are logged and never stop the bot from generating images.
 """
 import json
@@ -64,9 +69,9 @@ class SqliteStore:
 		finally:
 			db.close()
 
-	def save_image(self, chat_id, message_id, prompt, command, style, file_id, caption, base=None):
+	def save_image(self, chat_id, message_id, prompt, command, style, file_id, caption, base=None, kind=None):
 		def change(record):
-			record = record or {'prompt': prompt, 'command': command, 'images': {}}
+			record = record or dict({'prompt': prompt, 'command': command, 'images': {}}, **({'kind': kind} if kind else {}))
 			record['images'][key(style)] = {'file_id': file_id, 'caption': caption, 'base': base}
 			record['current'] = key(style)
 			return record
@@ -106,13 +111,15 @@ class DynamoStore:
 			return None
 		return {'prompt': item['prompt'], 'command': item['command'], 'current': item['current'], 'images': item['images']}
 
-	def save_image(self, chat_id, message_id, prompt, command, style, file_id, caption, base=None):
+	def save_image(self, chat_id, message_id, prompt, command, style, file_id, caption, base=None, kind=None):
 		from botocore.exceptions import ClientError
 		id = self._id(chat_id, message_id)
 		expires = int(time.time()) + self.days * 86400 # DynamoDB TTL deletes the item after this
+		item = {'id': id, 'prompt': prompt, 'command': command, 'current': key(style), 'images': {}, 'ttl': expires}
+		if kind:
+			item['kind'] = kind
 		try: # create the record the first time we see this message
-			self.table.put_item(Item={'id': id, 'prompt': prompt, 'command': command, 'current': key(style), 'images': {}, 'ttl': expires},
-				ConditionExpression='attribute_not_exists(id)')
+			self.table.put_item(Item=item, ConditionExpression='attribute_not_exists(id)')
 		except ClientError as e:
 			if e.response['Error']['Code'] != 'ConditionalCheckFailedException':
 				raise
@@ -165,8 +172,14 @@ def _safely(operation, default, *args):
 def get(chat_id, message_id):
 	return _safely('get', None, chat_id, message_id)
 
-def save_image(chat_id, message_id, prompt, command, style, file_id, caption, base=None):
-	return _safely('save_image', None, chat_id, message_id, prompt, command, style, file_id, caption, base)
+def save_image(chat_id, message_id, prompt, command, style, file_id, caption, base=None, kind=None):
+	return _safely('save_image', None, chat_id, message_id, prompt, command, style, file_id, caption, base, kind)
+
+def save_variations(chat_id, prompt, command, sent, captions):
+	"""Remember each photo of a variations album: sent is what sendMediaGroup returned, captions the caption of each photo."""
+	for photo, caption in zip(sent or [], captions):
+		if photo.get('message_id') and photo.get('file_id'):
+			save_image(chat_id, photo['message_id'], prompt, command, None, photo['file_id'], caption, kind='variation')
 
 def set_current(chat_id, message_id, style):
 	return _safely('set_current', None, chat_id, message_id, style)
