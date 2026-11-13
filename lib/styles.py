@@ -1,23 +1,23 @@
-# key: (button label, short phrase appended to the prompt)
+# key: (button label, short phrase appended to the prompt). Kept in alphabetical order of label: the buttons appear in this order.
 # Removing a style leaves its saved images in old records; a press of its button on an old message just refreshes the buttons.
 STYLES = {
-	'monet':       ('Monet', 'in the style of Claude Monet'),
-	'picasso':     ('Picasso', 'in the style of Pablo Picasso'),
+	'render3d':    ('3D render', 'as a 3D render'),
 	'8bit':        ('8-bit', 'as 8-bit pixel art'),
-	'ega':         ('EGA', 'as EGA 16-color pixel art'),
-	'photo':       ('Photo', 'as a photograph'),
-	'watercolour': ('Watercolour', 'as a watercolour painting'),
-	'lithograph':  ('Lithograph', 'as a lithograph print'),
-	'stamp':       ('Rubber stamp', 'as a rubber stamp print'),
-	'stencil':     ('Stencil', 'as stencil art'),
 	'anime':       ('Anime', 'as anime art'),
-	'vangogh':     ('Van Gogh', 'in the style of Vincent van Gogh'),
+	'bw':          ('Black & white', 'in black & white'),
 	'cartoon':     ('Cartoon', 'as a cartoon'),
 	'comicbook':   ('Comic book', 'as a comic book illustration'),
-	'render3d':    ('3D render', 'as a 3D render'),
+	'ega':         ('EGA', 'as EGA 16-color pixel art'),
+	'lithograph':  ('Lithograph', 'as a lithograph print'),
+	'monet':       ('Monet', 'in the style of Claude Monet'),
+	'photo':       ('Photo', 'as a photograph'),
+	'picasso':     ('Picasso', 'in the style of Pablo Picasso'),
 	'popart':      ('Pop art', 'as pop art'),
+	'stamp':       ('Rubber stamp', 'as a rubber stamp print'),
+	'stencil':     ('Stencil', 'as stencil art'),
 	'ukiyoe':      ('Ukiyo-e', 'as a ukiyo-e woodblock print'),
-	'bw':          ('Black & white', 'in black & white'),
+	'vangogh':     ('Van Gogh', 'in the style of Vincent van Gogh'),
+	'watercolour': ('Watercolour', 'as a watercolour painting'),
 }
 
 import unicodedata
