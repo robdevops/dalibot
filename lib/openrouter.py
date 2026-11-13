@@ -218,6 +218,19 @@ def variations(image_bytes, note, number=4, model=None, looks=None):
 	used = [look for look, (ok, image) in zip(looks, results) if ok]
 	return True, images[0] if len(images) == 1 else images, used
 
+# Image models redraw rather than enlarge, so this asks for the closest thing to an enlargement they can do.
+UPSCALE_PROMPT = (
+	"Reproduce this exact image at high resolution. Keep the composition, the subject, every object, the colours, the lighting "
+	"and the art style exactly as they are. Only sharpen it and add fine detail and texture where the original is blurry, blocky "
+	"or noisy. Do not add, remove, move, crop or restyle anything."
+)
+
+def upscale(image_bytes, model=None):
+	"""Redraw a small or soft image as faithfully as the model can, at the model's full size.
+	Returns (True, image_bytes) or (False, error message)."""
+	data_url = 'data:image/png;base64,' + base64.b64encode(image_bytes).decode()
+	return _request({'prompt': UPSCALE_PROMPT, 'input_references': [{'type': 'image_url', 'image_url': {'url': data_url}}]}, model)
+
 def _ask(system, user, max_tokens, temperature):
 	"""One call to the cheap text model. Returns its reply, or raises."""
 	body = {'model': config_openrouter_text_model, 'messages': [{'role': 'system', 'content': system}, {'role': 'user', 'content': user}],
