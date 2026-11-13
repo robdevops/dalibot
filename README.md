@@ -20,6 +20,7 @@ Telegram chat bot for AI image generation, powered by [OpenRouter](https://openr
 | Command | Model | Notes |
 | --- | --- | --- |
 | `/dream` | `openai/gpt-image-2` by default | Set `OPENROUTER_IMAGE_MODEL` to change |
+| `/imagine` | same as `/dream` | An alias of the default command |
 | `/gpt` | `openai/gpt-image-2` | Cheapest |
 | `/flux` | `black-forest-labs/flux-3-image-klein` | Fastest |
 | `/qwen` | `qwen/qwen-image-2.1-turbo` | |

@@ -312,6 +312,8 @@ def setMyCommands():
 	for name, (model, description) in image_models.items():
 		if name != config_telegramBotCommand:
 			commands.append({'command': name, 'description': 'same, using ' + description})
+	for alias, name in COMMAND_ALIASES.items():
+		commands.append({'command': alias, 'description': 'same as /' + name})
 	commands.append({'command': CREDITS_COMMANDS[0], 'description': 'show what has been spent on OpenRouter: today, week, month'})
 	data = {'commands': commands}
 	data = json.dumps(data).encode('utf-8')

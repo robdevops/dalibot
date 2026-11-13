@@ -32,13 +32,16 @@ def without_mention(text, botName):
 def parse_command(message, botName):
 	"""Work out which model a message asks for. Returns (command, prompt, addressed).
 	'/flux a cat' -> ('flux', 'a cat', True); '@bot a cat' or 'a cat @bot' -> (default command, 'a cat', True).
+	An alias counts as the command it stands for: '/imagine a cat' -> (default command, 'a cat', True).
 	The bot can be tagged anywhere in the text; the tag is not part of the prompt."""
 	text = message.strip()
 	m = re.match(r'^/(\w+)(@\w+)?\s*(.*)$', text, re.S)
-	if m and (m.group(1).lower() in image_models or m.group(1).lower() in CREDITS_COMMANDS):
+	name = m.group(1).lower() if m else ''
+	name = COMMAND_ALIASES.get(name, name)
+	if name in image_models or name in CREDITS_COMMANDS:
 		if m.group(2) and botName and m.group(2).lower() != botName.lower():
 			return config_telegramBotCommand, text, False # addressed to a different bot
-		return m.group(1).lower(), without_mention(m.group(3), botName), True
+		return name, without_mention(m.group(3), botName), True
 	if mentions_bot(text, botName):
 		return config_telegramBotCommand, without_mention(text, botName), True
 	return config_telegramBotCommand, text, False
