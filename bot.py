@@ -155,6 +155,123 @@ def importForwarded(msg, chat_id, message_id):
 		telegram.sendMessage(chat_id, "Sorry, that picture could not be saved to the image history.", message_id)
 	return True
 
+# Telegram delivers an album as one message per picture, and only one of them carries the caption. When that
+# caption has #storeonly or #upscale, it is noted so the album's other pictures get the same treatment. They
+# may reach us before the captioned one has been handled (each webhook call runs on its own), so they wait a
+# little for the note. With long polling messages are handled one after another, so there is nothing to wait for.
+ALBUM_WAIT = 5 # seconds
+polling = False
+
+def withAlbumCaption(msg, chat_id):
+	"""msg, with the album's tagged caption filled in if msg is a picture in such an album and has no caption itself."""
+	album = msg.get("media_group_id")
+	if not album or not imageFileId(msg):
+		return msg
+	caption = msg.get("caption") or ""
+	tagged = lambda text: STORE_ONLY.search(text) or worker.UPSCALE.search(text)
+	if caption:
+		# noted whether it is tagged or not, so the album's other pictures stop waiting as soon as it has been seen
+		store.remember_album(chat_id, album, caption)
+		return msg
+	waited = 0
+	while True:
+		inherited = store.album_caption(chat_id, album)
+		if inherited is not None or polling or waited >= ALBUM_WAIT:
+			break
+		time.sleep(1)
+		waited += 1
+	if not inherited or not tagged(inherited):
+		return msg
+	print("[Telegram album]: using the caption of another picture in the album")
+	return dict(msg, caption=inherited)
+
+STORE_ONLY = re.compile(r'(?<!\w)#storeonly(?!\w)', re.IGNORECASE)
+
+MAX_STORED_FILE = 20 * 1024 * 1024 # Telegram lets a bot (and so a gallery) download files up to 20 MB
+
+def storeOnly(msg, chat_id, message_id, edited=False):
+	"""A picture posted with #storeonly in its caption, or a picture that someone replies to with #storeonly, is added
+	to the image history as it is, so that a gallery can show it. Nothing is generated. Returns True if msg was such a
+	post or reply (also when the picture could not be saved). An edit does nothing: otherwise editing the caption
+	would put back a picture that was deleted."""
+	text = msg.get("caption") or msg.get("text") or ""
+	if not STORE_ONLY.search(text):
+		return False
+	picture = msg # the message that holds the picture: this one, or the one it replies to
+	if not (msg.get("photo") or msg.get("document")):
+		picture = msg.get("reply_to_message") or {}
+		if not (picture.get("photo") or picture.get("document")):
+			return False # the tag in ordinary text
+	if edited:
+		return True
+	document = picture.get("document") or {}
+	if picture.get("photo"):
+		file_id = picture["photo"][-1]["file_id"] # the largest size
+	elif document.get("mime_type") == "image/jpeg":
+		if not 0 < document.get("file_size", 0) <= MAX_STORED_FILE:
+			telegram.sendMessage(chat_id, "That file is too large to save: #storeonly takes files up to 20 MB.", message_id)
+			return True
+		file_id = document["file_id"]
+	else:
+		telegram.sendMessage(chat_id, "#storeonly needs a photo, or a JPEG sent as a file.", message_id)
+		return True
+	# the tag and the bot's name are not part of the caption
+	tidy = lambda words: worker.without_mention(STORE_ONLY.sub(' ', words), botName)
+	caption = tidy(text)
+	record_id = str(picture["message_id"])
+	if picture is not msg:
+		if (store.get(chat_id, record_id) or {}).get('images'): # saving would replace it, and with it every style made for it
+			telegram.sendMessage(chat_id, "That picture is already in the image history.", message_id)
+			return True
+		caption = caption or tidy(picture.get("caption") or "") # what the reply says, else the picture's own caption
+	print("[Telegram #storeonly]: adding the picture to the image history")
+	if store.import_image(chat_id, record_id, caption, STORE_ONLY_COMMAND, file_id, int(picture.get("date") or time.time())):
+		if not telegram.setMessageReaction(chat_id, message_id, "👍"): # reactions can be refused; say so in words instead
+			telegram.sendMessage(chat_id, "Saved to the image history.", message_id)
+	else:
+		telegram.sendMessage(chat_id, "Sorry, that picture could not be saved to the image history.", message_id)
+	return True
+
+DELETE = re.compile(r'(?<!\w)#delete(?!\w)', re.IGNORECASE)
+
+def mayDelete(chat_id, user_id, chat_type):
+	"""Deleting is for the users listed by id in TELEGRAM_ALLOWED_USER_IDS ("all" does not count) and,
+	in a group, for that group's owner and administrators."""
+	return user_id in config_telegramAllowedUserIDs or (chat_type != "private" and telegram.isChatAdmin(chat_id, user_id))
+
+def deletePicture(msg, chat_id, user_id, chat_type, message_id):
+	"""A reply of #delete to a picture removes that picture's record from the image history, with every style made
+	for it, so a gallery no longer shows it. The messages in the chat are left alone. Returns True if msg was such a reply."""
+	target = msg.get("reply_to_message")
+	if not target or not imageFileId(target) or not DELETE.search(msg.get("text") or msg.get("caption") or ""):
+		return False
+	if not mayDelete(chat_id, user_id, chat_type):
+		print(user_id, "is not allowed to delete pictures. Ignoring.", file=stderr)
+		telegram.sendMessage(chat_id, "Sorry, only the bot's approved users and this group's admins can delete pictures.", message_id)
+		return True
+	# a picture is recorded under its message, or under its file when it was added by forwarding it to the bot
+	record_ids = [str(target["message_id"])]
+	if target.get("photo"):
+		record_ids.append('f' + target["photo"][-1]["file_unique_id"])
+	total = 0
+	for record_id in record_ids:
+		count = store.forget(chat_id, record_id)
+		if count is None:
+			telegram.sendMessage(chat_id, "Sorry, that picture could not be deleted from the image history.", message_id)
+			return True
+		total += count
+	sender = target.get("from") or {}
+	if botName and sender.get("is_bot") and '@' + sender.get("username", "").lower() == telegram.botName.lower():
+		# one of our own pictures: take its buttons away, or the next press would make and record a new image
+		telegram.editButtons(chat_id, target["message_id"], {'inline_keyboard': []})
+	if total:
+		print("[Telegram #delete]: removed", total, "image(s)")
+		if not telegram.setMessageReaction(chat_id, message_id, "👍"): # reactions can be refused; say so in words instead
+			telegram.sendMessage(chat_id, "Deleted from the image history.", message_id)
+	else:
+		telegram.sendMessage(chat_id, "That picture is not in the image history.", message_id)
+	return True
+
 def parseTelegram(inbound):
 	"""Extract what the worker needs from a Telegram update. Returns None if it should be ignored."""
 	file_id = False
@@ -184,6 +301,12 @@ def parseTelegram(inbound):
 			return
 		if not edited and importForwarded(msg, chat_id, message_id):
 			return
+	if not edited:
+		msg = withAlbumCaption(msg, chat_id)
+	if storeOnly(msg, chat_id, message_id, edited):
+		return
+	if deletePicture(msg, chat_id, user_id, chat_type, message_id): # for an edited reply too: deleting twice does no harm
+		return
 	if "text" in msg:
 		message = msg["text"]
 		print("[Telegram]:", user, message)
@@ -305,6 +428,8 @@ def parseTelegramCallback(query):
 
 def poll():
 	"""Telegram long polling: no web server, domain or certificate required."""
+	global polling
+	polling = True
 	offset = None
 	while True:
 		updates = telegram.getUpdates(offset)

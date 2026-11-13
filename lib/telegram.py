@@ -387,6 +387,18 @@ def sendMessage(chat_id, message, message_id=None):
 		print(r.code, "error Telegram sendMessage", message)
 		return False
 
+def isChatAdmin(chat_id, user_id):
+	"""Is this user the owner or an administrator of this chat? False if Telegram cannot be asked."""
+	url = webhooks['telegram'] + "getChatMember"
+	data = json.dumps({'chat_id': chat_id, 'user_id': int(user_id)}).encode('utf-8')
+	req = urllib.request.Request(url, data, {'Content-type': 'application/json'}, method='POST')
+	try:
+		with urllib.request.urlopen(req, timeout=config_http_timeout) as r:
+			return json.load(r)['result']['status'] in ('creator', 'administrator')
+	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout, ValueError, KeyError, TypeError) as e:
+		print("Failure executing request:", redact(url), str(e))
+		return False
+
 def setMessageReaction(chat_id, message_id, emoji):
 	"""Put an emoji reaction on a message: a quiet acknowledgement that adds nothing to the chat."""
 	url = webhooks['telegram'] + "setMessageReaction"
