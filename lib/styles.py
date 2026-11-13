@@ -8,6 +8,7 @@ STYLES = {
 	'bw':          ('Black & white', 'in black & white'),
 	'cartoon':     ('Cartoon', 'as a cartoon'),
 	'comicbook':   ('Comic book', 'as a comic book illustration'),
+	'cyberpunk':   ('Cyberpunk', 'as cyberpunk art'),
 	'ega':         ('EGA', 'as EGA 16-color pixel art'),
 	'lithograph':  ('Lithograph', 'as a lithograph print'),
 	'monet':       ('Monet', 'in the style of Claude Monet'),
