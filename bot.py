@@ -155,6 +155,34 @@ def importForwarded(msg, chat_id, message_id):
 		telegram.sendMessage(chat_id, "Sorry, that picture could not be saved to the image history.", message_id)
 	return True
 
+STORE_ONLY = re.compile(r'(?<!\w)#storeonly(?!\w)', re.IGNORECASE)
+
+def storeOnly(msg, chat_id, message_id):
+	"""A picture posted with #storeonly in its caption is added to the image history as it is, so that a gallery
+	can show it. Nothing is generated. Returns True if msg was such a post (also when it could not be saved).
+	The record belongs to the message, so editing the caption stores it again in the same place."""
+	caption = msg.get("caption") or ""
+	if not STORE_ONLY.search(caption):
+		return False
+	document = msg.get("document") or {}
+	if msg.get("photo"):
+		file_id = msg["photo"][-1]["file_id"] # the largest size
+	elif document.get("mime_type") == "image/jpeg":
+		file_id = document["file_id"]
+	elif document:
+		telegram.sendMessage(chat_id, "#storeonly needs a photo, or a JPEG sent as a file.", message_id)
+		return True
+	else:
+		return False # a caption on something that is not a picture
+	caption = re.sub(r'\s+', ' ', STORE_ONLY.sub(' ', caption)).strip() # the tag is not part of the caption
+	print("[Telegram #storeonly]: adding the picture to the image history")
+	if store.import_image(chat_id, message_id, caption, STORE_ONLY_COMMAND, file_id, int(msg.get("date") or time.time())):
+		if not telegram.setMessageReaction(chat_id, message_id, "👍"): # reactions can be refused; say so in words instead
+			telegram.sendMessage(chat_id, "Saved to the image history.", message_id)
+	else:
+		telegram.sendMessage(chat_id, "Sorry, that picture could not be saved to the image history.", message_id)
+	return True
+
 def parseTelegram(inbound):
 	"""Extract what the worker needs from a Telegram update. Returns None if it should be ignored."""
 	file_id = False
@@ -184,6 +212,8 @@ def parseTelegram(inbound):
 			return
 		if not edited and importForwarded(msg, chat_id, message_id):
 			return
+	if storeOnly(msg, chat_id, message_id):
+		return
 	if "text" in msg:
 		message = msg["text"]
 		print("[Telegram]:", user, message)
