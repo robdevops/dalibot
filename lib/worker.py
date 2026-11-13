@@ -171,6 +171,8 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 				else:
 					sent = telegram.sendPhoto(chat_id, image_url, captions[0], message_id)
 					sent = [sent] if sent else []
+				if not sent:
+					error_to_telegram(chat_id, SEND_FAILED, message_id)
 				store.save_variations(chat_id, note, command, sent, [f"{style}, {viewpoint}" for style, viewpoint in result[2]]) # so a gallery can find them
 				if config_archive:
 					if isinstance(image_url, list):
@@ -232,8 +234,10 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 							pending.replaced = True
 						else:
 							print("In-place edit failed, posting a new image instead", file=stderr)
-					if not sent:
+					if not sent and telegram.upload_timeout() >= 5: # too close to the Lambda deadline: just say it failed
 						sent = telegram.sendPhoto(chat_id, image_url, caption, message_id, reply_markup=keyboard)
+					if not sent:
+						error_to_telegram(chat_id, SEND_FAILED, message_id)
 					if sent and sent['message_id'] and sent['file_id']:
 						if edit_message_id and sent['message_id'] != edit_message_id:
 							# the old message couldn't be edited, so this is a new one: bring its earlier images along
@@ -343,6 +347,8 @@ def url_to_file(url, filename):
 	image_bytesio = download_file(url)
 	bytesio_to_file(image_bytesio, filename)
 	return
+
+SEND_FAILED = "Sorry, the image was made but sending it to Telegram failed. Please try again."
 
 def error_to_telegram(chat_id, message, message_id):
 	print("Sending error to Telegram")
