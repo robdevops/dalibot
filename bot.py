@@ -266,7 +266,8 @@ def deletePicture(msg, chat_id, user_id, chat_type, message_id):
 		telegram.editButtons(chat_id, target["message_id"], {'inline_keyboard': []})
 	if total:
 		print("[Telegram #delete]: removed", total, "image(s)")
-		telegram.sendMessage(chat_id, "Deleted from the image history" + (f" ({total} images)." if total > 1 else "."), message_id)
+		if not telegram.setMessageReaction(chat_id, message_id, "👍"): # reactions can be refused; say so in words instead
+			telegram.sendMessage(chat_id, "Deleted from the image history.", message_id)
 	else:
 		telegram.sendMessage(chat_id, "That picture is not in the image history.", message_id)
 	return True
