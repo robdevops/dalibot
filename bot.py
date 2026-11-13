@@ -190,30 +190,42 @@ STORE_ONLY = re.compile(r'(?<!\w)#storeonly(?!\w)', re.IGNORECASE)
 MAX_STORED_FILE = 20 * 1024 * 1024 # Telegram lets a bot (and so a gallery) download files up to 20 MB
 
 def storeOnly(msg, chat_id, message_id, edited=False):
-	"""A picture posted with #storeonly in its caption is added to the image history as it is, so that a gallery
-	can show it. Nothing is generated. Returns True if msg was such a post (also when it could not be saved).
-	An edit of such a post does nothing: otherwise editing the caption would put back a picture that was deleted."""
-	caption = msg.get("caption") or ""
-	if not STORE_ONLY.search(caption):
+	"""A picture posted with #storeonly in its caption, or a picture that someone replies to with #storeonly, is added
+	to the image history as it is, so that a gallery can show it. Nothing is generated. Returns True if msg was such a
+	post or reply (also when the picture could not be saved). An edit does nothing: otherwise editing the caption
+	would put back a picture that was deleted."""
+	text = msg.get("caption") or msg.get("text") or ""
+	if not STORE_ONLY.search(text):
 		return False
+	picture = msg # the message that holds the picture: this one, or the one it replies to
+	if not (msg.get("photo") or msg.get("document")):
+		picture = msg.get("reply_to_message") or {}
+		if not (picture.get("photo") or picture.get("document")):
+			return False # the tag in ordinary text
 	if edited:
 		return True
-	document = msg.get("document") or {}
-	if msg.get("photo"):
-		file_id = msg["photo"][-1]["file_id"] # the largest size
+	document = picture.get("document") or {}
+	if picture.get("photo"):
+		file_id = picture["photo"][-1]["file_id"] # the largest size
 	elif document.get("mime_type") == "image/jpeg":
 		if not 0 < document.get("file_size", 0) <= MAX_STORED_FILE:
 			telegram.sendMessage(chat_id, "That file is too large to save: #storeonly takes files up to 20 MB.", message_id)
 			return True
 		file_id = document["file_id"]
-	elif document:
+	else:
 		telegram.sendMessage(chat_id, "#storeonly needs a photo, or a JPEG sent as a file.", message_id)
 		return True
-	else:
-		return False # a caption on something that is not a picture
-	caption = re.sub(r'\s+', ' ', STORE_ONLY.sub(' ', caption)).strip() # the tag is not part of the caption
+	# the tag and the bot's name are not part of the caption
+	tidy = lambda words: worker.without_mention(STORE_ONLY.sub(' ', words), botName)
+	caption = tidy(text)
+	record_id = str(picture["message_id"])
+	if picture is not msg:
+		if (store.get(chat_id, record_id) or {}).get('images'): # saving would replace it, and with it every style made for it
+			telegram.sendMessage(chat_id, "That picture is already in the image history.", message_id)
+			return True
+		caption = caption or tidy(picture.get("caption") or "") # what the reply says, else the picture's own caption
 	print("[Telegram #storeonly]: adding the picture to the image history")
-	if store.import_image(chat_id, message_id, caption, STORE_ONLY_COMMAND, file_id, int(msg.get("date") or time.time())):
+	if store.import_image(chat_id, record_id, caption, STORE_ONLY_COMMAND, file_id, int(picture.get("date") or time.time())):
 		if not telegram.setMessageReaction(chat_id, message_id, "👍"): # reactions can be refused; say so in words instead
 			telegram.sendMessage(chat_id, "Saved to the image history.", message_id)
 	else:
