@@ -9,9 +9,12 @@ from lib.styles import STYLES
 UPLOAD_TIMEOUT = 60 # seconds for a request that uploads an image; a few MB can take a while to reach Telegram's servers
 
 def redact(text):
-	"""Text for the logs, without the bot token (it is part of every Bot API URL)."""
-	text = str(text)
-	return text.replace(config_telegramBotToken, '<TELEGRAM_BOT_TOKEN>') if config_telegramBotToken else text
+	"""Text for the logs, without the bot token (it is part of every Bot API URL) or the webhook secret."""
+	text = text.decode(errors='replace') if isinstance(text, bytes) else str(text)
+	for secret, name in ((config_telegramBotToken, '<TELEGRAM_BOT_TOKEN>'), (config_telegramOutgoingToken, '<TELEGRAM_OUTGOING_TOKEN>')):
+		if secret:
+			text = text.replace(secret, name).replace(urllib.parse.quote(secret, safe=''), name)
+	return text
 
 def for_upload(photo):
 	"""Image bytes to upload as a Telegram photo. Telegram turns every photo into a JPEG anyway, so a PNG is sent as a
@@ -22,7 +25,9 @@ def for_upload(photo):
 	try:
 		from PIL import Image
 		im = Image.open(io.BytesIO(photo))
-		if im.mode in ('RGBA', 'LA', 'P', 'PA'):
+		if im.mode not in ('RGB', 'RGBA', 'L', 'LA', 'P', 'PA'): # e.g. 16-bit, which a plain conversion would wash out
+			return photo
+		if im.mode in ('RGBA', 'LA', 'P', 'PA') or 'transparency' in im.info:
 			im = im.convert('RGBA')
 			background = Image.new('RGB', im.size, (255, 255, 255)) # transparency becomes white
 			background.paste(im, mask=im.getchannel('A'))
@@ -38,16 +43,21 @@ def for_upload(photo):
 	print(f"Upload: PNG {len(photo):,} bytes as JPEG {len(jpeg):,} bytes")
 	return jpeg if len(jpeg) < len(photo) else photo
 
+def upload_timeout():
+	"""The socket timeout for one upload attempt. It applies to sending and to waiting for the answer separately, so one
+	attempt can take about twice as long: near the Lambda deadline, use half the time left so the error can still be sent."""
+	return min(UPLOAD_TIMEOUT, deadline.limit(2 * UPLOAD_TIMEOUT) / 2)
+
 def upload(req, name):
 	"""urlopen for a request that uploads an image: a longer timeout, and one retry if the network fails (not if Telegram
 	answers with an error), as long as the Lambda deadline leaves time for it. Raises like urlopen if both attempts fail."""
 	for attempt in (1, 2):
 		try:
-			return urllib.request.urlopen(req, timeout=deadline.limit(UPLOAD_TIMEOUT))
+			return urllib.request.urlopen(req, timeout=upload_timeout())
 		except urllib.error.HTTPError:
 			raise
 		except (urllib.error.URLError, socket.timeout, ConnectionError) as e:
-			if attempt == 2 or deadline.limit(UPLOAD_TIMEOUT) < 10:
+			if attempt == 2 or upload_timeout() < 5:
 				raise
 			print(f"Telegram {name} failed ({e}), trying once more", file=stderr)
 			time.sleep(1)
@@ -65,7 +75,7 @@ def setWebhook():
 	try:
 		r = urllib.request.urlopen(req, timeout=config_http_timeout)
 	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
-		print("Failure executing request:", redact(url), data, str(e))
+		print("Failure executing request:", redact(url), redact(data), str(e))
 		return False
 	print("Registering Telegram webhook:", r.read().decode(), file=stderr)
 
@@ -102,7 +112,7 @@ def getMe():
 	try:
 		r = urllib.request.urlopen(req, timeout=config_http_timeout)
 	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
-		print("Failure executing request:", redact(url), data, str(e))
+		print("Failure executing request:", redact(url), redact(data), str(e))
 		return False
 	if r.code != 200:
 		print(r.code, "error Telegram getMe")
@@ -344,7 +354,7 @@ def getFileURL(file_id):
 	try:
 		r = urllib.request.urlopen(req, timeout=config_http_timeout)
 	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
-		print("Failure executing request:", redact(url), data.decode(), str(e))
+		print("Failure executing request:", redact(url), redact(data), str(e))
 		return False
 	if r.code != 200:
 		print(r.code, "error Telegram getFileURL")
@@ -369,7 +379,7 @@ def sendMessage(chat_id, message, message_id=None):
 	try:
 		r = urllib.request.urlopen(req, timeout=config_http_timeout)
 	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
-		print("Failure executing request:", redact(url), data, str(e))
+		print("Failure executing request:", redact(url), redact(data), str(e))
 		return False
 	if r.code == 200:
 		print(r.code, "OK Telegram sendMessage", message)
@@ -391,7 +401,7 @@ def setMyCommands():
 	try:
 		r = urllib.request.urlopen(req, timeout=config_http_timeout)
 	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
-		print("Failure executing request:", redact(url), data, str(e))
+		print("Failure executing request:", redact(url), redact(data), str(e))
 		return False
 	if not r.code == 200:
 		print(r.code, "error Telegram setMyCommands")

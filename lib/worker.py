@@ -201,7 +201,7 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 							pending.replaced = True
 						else:
 							print("In-place edit failed, posting a new image instead", file=stderr)
-					if not sent:
+					if not sent and telegram.upload_timeout() >= 5: # too close to the Lambda deadline: just say it failed
 						sent = telegram.sendPhoto(chat_id, image_url, caption, message_id, reply_markup=keyboard)
 					if not sent:
 						error_to_telegram(chat_id, SEND_FAILED, message_id)
