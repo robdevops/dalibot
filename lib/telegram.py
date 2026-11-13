@@ -216,7 +216,8 @@ def sendMediaGroup(chat_id, items, caption, message_id=None):
 	"""Send photos as one album. items are URLs, file_ids or image bytes (uploaded). caption is either one text, which goes on
 	the first photo (Telegram then shows it under the whole album), or a list with one caption per photo (Telegram then shows
 	each caption only when that photo is opened). Albums can't carry buttons. Returns a list with the message id and file_id of
-	each photo sent (as photoInfo gives them; empty if Telegram's answer could not be read), or False if sending failed."""
+	each photo, in order (as photoInfo gives them; None values for any photo that wasn't sent or couldn't be read), or False
+	if nothing was sent."""
 	items = list(items)
 	captions = list(caption) if isinstance(caption, (list, tuple)) else [caption] + [''] * (len(items) - 1)
 	captions += [''] * (len(items) - len(captions))
@@ -225,7 +226,9 @@ def sendMediaGroup(chat_id, items, caption, message_id=None):
 		return [sent] if sent else False
 	if len(items) > ALBUM_MAX: # more than one album's worth: several albums
 		sent = [sendMediaGroup(chat_id, items[i:i + ALBUM_MAX], captions[i:i + ALBUM_MAX], message_id) for i in range(0, len(items), ALBUM_MAX)]
-		return [photo for album in sent if album for photo in album] or False
+		photos = [photo for chunk, album in zip(range(0, len(items), ALBUM_MAX), sent)
+			for photo in (album or [{'message_id': None, 'file_id': None}] * len(items[chunk:chunk + ALBUM_MAX]))]
+		return photos if any(sent) else False
 	media, files = [], {}
 	for idx, item in enumerate(items):
 		entry = {'type': 'photo'}
@@ -268,7 +271,8 @@ def sendMediaGroup(chat_id, items, caption, message_id=None):
 
 def albumInfo(response):
 	"""The message id and file_id of each photo in a sendMediaGroup response, in album order (Telegram sends each album
-	photo as its own message). Photos it can't read are left out; an unreadable answer gives an empty list."""
+	photo as its own message). A photo it can't read keeps its place with None values, as in photoInfo, so the list still
+	lines up with the captions; an unreadable answer gives an empty list."""
 	try:
 		messages = json.load(response)['result']
 	except (ValueError, KeyError, TypeError):
@@ -278,7 +282,7 @@ def albumInfo(response):
 		try:
 			photos.append({'message_id': str(message['message_id']), 'file_id': message['photo'][-1]['file_id']})
 		except (KeyError, IndexError, TypeError):
-			pass
+			photos.append({'message_id': None, 'file_id': None})
 	return photos
 
 def getFileURL(file_id):

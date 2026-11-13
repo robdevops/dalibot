@@ -138,7 +138,7 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 				else:
 					sent = telegram.sendPhoto(chat_id, image_url, captions[0], message_id)
 					sent = [sent] if sent else []
-				store.save_variations(chat_id, note, command, sent, captions) # so a gallery can find them
+				store.save_variations(chat_id, note, command, sent, [f"{style}, {viewpoint}" for style, viewpoint in result[2]]) # so a gallery can find them
 				if config_archive:
 					if isinstance(image_url, list):
 						for idx, url in enumerate(image_url):

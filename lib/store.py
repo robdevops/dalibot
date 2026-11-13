@@ -176,7 +176,8 @@ def save_image(chat_id, message_id, prompt, command, style, file_id, caption, ba
 	return _safely('save_image', None, chat_id, message_id, prompt, command, style, file_id, caption, base, kind)
 
 def save_variations(chat_id, prompt, command, sent, captions):
-	"""Remember each photo of a variations album: sent is what sendMediaGroup returned, captions the caption of each photo."""
+	"""Remember each photo of a variations album: sent is what sendMediaGroup returned (in album order), captions the
+	style and viewpoint of each photo. Photos that weren't sent or couldn't be read (None values) are skipped."""
 	for photo, caption in zip(sent or [], captions):
 		if photo.get('message_id') and photo.get('file_id'):
 			save_image(chat_id, photo['message_id'], prompt, command, None, photo['file_id'], caption, kind='variation')
