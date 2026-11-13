@@ -155,6 +155,36 @@ def importForwarded(msg, chat_id, message_id):
 		telegram.sendMessage(chat_id, "Sorry, that picture could not be saved to the image history.", message_id)
 	return True
 
+# Telegram delivers an album as one message per picture, and only one of them carries the caption. When that
+# caption has #storeonly or #upscale, it is noted so the album's other pictures get the same treatment. They
+# may reach us before the captioned one has been handled (each webhook call runs on its own), so they wait a
+# little for the note. With long polling messages are handled one after another, so there is nothing to wait for.
+ALBUM_WAIT = 5 # seconds
+polling = False
+
+def withAlbumCaption(msg, chat_id):
+	"""msg, with the album's tagged caption filled in if msg is a picture in such an album and has no caption itself."""
+	album = msg.get("media_group_id")
+	if not album or not imageFileId(msg):
+		return msg
+	caption = msg.get("caption") or ""
+	if STORE_ONLY.search(caption) or worker.UPSCALE.search(caption):
+		store.remember_album(chat_id, album, caption)
+		return msg
+	if caption:
+		return msg
+	waited = 0
+	while True:
+		inherited = store.album_caption(chat_id, album)
+		if inherited or polling or waited >= ALBUM_WAIT:
+			break
+		time.sleep(0.5)
+		waited += 0.5
+	if not inherited:
+		return msg
+	print("[Telegram album]: using the caption of another picture in the album")
+	return dict(msg, caption=inherited)
+
 STORE_ONLY = re.compile(r'(?<!\w)#storeonly(?!\w)', re.IGNORECASE)
 
 def storeOnly(msg, chat_id, message_id):
@@ -212,6 +242,8 @@ def parseTelegram(inbound):
 			return
 		if not edited and importForwarded(msg, chat_id, message_id):
 			return
+	if not edited:
+		msg = withAlbumCaption(msg, chat_id)
 	if storeOnly(msg, chat_id, message_id):
 		return
 	if "text" in msg:
@@ -335,6 +367,8 @@ def parseTelegramCallback(query):
 
 def poll():
 	"""Telegram long polling: no web server, domain or certificate required."""
+	global polling
+	polling = True
 	offset = None
 	while True:
 		updates = telegram.getUpdates(offset)

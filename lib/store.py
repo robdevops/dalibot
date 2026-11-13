@@ -184,6 +184,16 @@ def save_image(chat_id, message_id, prompt, command, style, file_id, caption, ba
 def set_current(chat_id, message_id, style):
 	return _safely('set_current', None, chat_id, message_id, style)
 
+def remember_album(chat_id, album, caption):
+	"""Note the caption of an album, so that the album's other pictures, which arrive as separate messages
+	with no caption of their own, can be treated the same way. It is a record with no images."""
+	return _safely('put', False, chat_id, 'g' + str(album), {'prompt': caption, 'command': '', 'current': '', 'images': {}}) is not False
+
+def album_caption(chat_id, album):
+	"""The caption noted for an album by remember_album, or None."""
+	record = get(chat_id, 'g' + str(album))
+	return record['prompt'] if record else None
+
 def import_image(chat_id, record_id, caption, command, file_id, created):
 	"""Record a picture that was made before the history existed. Saving the same record_id again replaces it.
 	Returns False if it could not be saved."""
