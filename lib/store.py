@@ -7,7 +7,12 @@ earlier image is a single edit with no upload. A record looks like:
      'images': {'_': {'file_id': ..., 'caption': ..., 'base': ...}, 'monet': {...}}}
 
 '_' is the image with no style. 'base' is the prompt after any expansion and cleanup, before the style
-phrase is added, so Remix can reuse it and skip the text model. Backends: SQLite (self-hosted, standard library only) and DynamoDB (Lambda).
+phrase is added, so Remix can reuse it and skip the text model.
+
+Each photo of a variations album (made from a photo the user sent) gets its own record too, so a gallery can find them:
+'kind' is 'variation', 'prompt' is what the user wrote with their photo (may be empty), and the one image is under '_'
+with that photo's caption (its style and viewpoint). Albums have no buttons, so the bot itself never reads these back.
+Backends: SQLite (self-hosted, standard library only) and DynamoDB (Lambda).
 Storage problems are logged and never stop the bot from generating images.
 """
 import json
@@ -70,9 +75,9 @@ class SqliteStore:
 		finally:
 			db.close()
 
-	def save_image(self, chat_id, message_id, prompt, command, style, file_id, caption, base=None):
+	def save_image(self, chat_id, message_id, prompt, command, style, file_id, caption, base=None, kind=None):
 		def change(record):
-			record = record or {'prompt': prompt, 'command': command, 'images': {}}
+			record = record or dict({'prompt': prompt, 'command': command, 'images': {}}, **({'kind': kind} if kind else {}))
 			record['images'][key(style)] = {'file_id': file_id, 'caption': caption, 'base': base}
 			record['current'] = key(style)
 			return record
@@ -91,6 +96,13 @@ class SqliteStore:
 
 	def import_image(self, chat_id, record_id, caption, command, file_id, created):
 		self._modify(chat_id, record_id, lambda _: imported_record(caption, command, file_id, created))
+
+	def forget(self, chat_id, record_id):
+		db = self._connect()
+		try:
+			db.execute('DELETE FROM messages WHERE chat_id=? AND message_id=?', (str(chat_id), str(record_id)))
+		finally:
+			db.close()
 
 	def describe(self):
 		db = self._connect()
@@ -111,17 +123,21 @@ class DynamoStore:
 
 	def get(self, chat_id, message_id):
 		item = self.table.get_item(Key={'id': self._id(chat_id, message_id)}).get('Item')
-		if not item:
+		if not item or int(item.get('ttl', 0)) < time.time(): # an expired item (a deleted record is one) may linger until DynamoDB removes it
 			return None
 		return {'prompt': item['prompt'], 'command': item['command'], 'current': item['current'], 'images': item['images']}
 
-	def save_image(self, chat_id, message_id, prompt, command, style, file_id, caption, base=None):
+	def save_image(self, chat_id, message_id, prompt, command, style, file_id, caption, base=None, kind=None):
 		from botocore.exceptions import ClientError
 		id = self._id(chat_id, message_id)
 		expires = int(time.time()) + self.days * 86400 # DynamoDB TTL deletes the item after this
+		item = {'id': id, 'prompt': prompt, 'command': command, 'current': key(style), 'images': {}, 'ttl': expires}
+		if kind:
+			item['kind'] = kind
 		try: # create the record the first time we see this message
-			self.table.put_item(Item={'id': id, 'prompt': prompt, 'command': command, 'current': key(style), 'images': {}, 'ttl': expires},
-				ConditionExpression='attribute_not_exists(id)')
+			self.table.put_item(Item=item,
+				ConditionExpression='attribute_not_exists(id) OR #ttl < :now', # an expired item (a deleted record) is replaced, not added to
+				ExpressionAttributeNames={'#ttl': 'ttl'}, ExpressionAttributeValues={':now': int(time.time())})
 		except ClientError as e:
 			if e.response['Error']['Code'] != 'ConditionalCheckFailedException':
 				raise
@@ -137,6 +153,12 @@ class DynamoStore:
 	def import_image(self, chat_id, record_id, caption, command, file_id, created):
 		self.table.put_item(Item={'id': self._id(chat_id, record_id), 'ttl': int(time.time()) + self.days * 86400,
 			**imported_record(caption, command, file_id, created)})
+
+	def forget(self, chat_id, record_id):
+		# The bot's permissions on the table do not include deleting. So the record is emptied and marked as already
+		# expired: anything reading the table skips a record with no images, and DynamoDB's TTL removes the item.
+		self.table.put_item(Item={'id': self._id(chat_id, record_id), 'prompt': '', 'command': '', 'current': '', 'images': {},
+			'ttl': int(time.time()) - 1})
 
 	def describe(self):
 		self.get('check', 'check') # a read, which fails if the table, region or permissions are wrong
@@ -178,11 +200,39 @@ def _safely(operation, default, *args):
 def get(chat_id, message_id):
 	return _safely('get', None, chat_id, message_id)
 
-def save_image(chat_id, message_id, prompt, command, style, file_id, caption, base=None):
-	return _safely('save_image', None, chat_id, message_id, prompt, command, style, file_id, caption, base)
+def save_image(chat_id, message_id, prompt, command, style, file_id, caption, base=None, kind=None):
+	return _safely('save_image', None, chat_id, message_id, prompt, command, style, file_id, caption, base, kind)
+
+def save_variations(chat_id, prompt, command, sent, captions):
+	"""Remember each photo of a variations album: sent is what sendMediaGroup returned (in album order), captions the
+	style and viewpoint of each photo. Photos that weren't sent or couldn't be read (None values) are skipped."""
+	for photo, caption in zip(sent or [], captions):
+		if photo.get('message_id') and photo.get('file_id'):
+			save_image(chat_id, photo['message_id'], prompt, command, None, photo['file_id'], caption, kind='variation')
 
 def set_current(chat_id, message_id, style):
 	return _safely('set_current', None, chat_id, message_id, style)
+
+def forget(chat_id, record_id):
+	"""Remove a record and every image in it. Returns how many images it held: 0 if there was no such record
+	(or it held none), None if the store could not be read or changed."""
+	record = _safely('get', False, chat_id, record_id)
+	if record is False:
+		return None
+	count = len(record['images']) if record else 0
+	if count and _safely('forget', False, chat_id, record_id) is False:
+		return None
+	return count
+
+def remember_album(chat_id, album, caption):
+	"""Note the caption of an album, so that the album's other pictures, which arrive as separate messages
+	with no caption of their own, know what it was. It is a record with no images."""
+	return _safely('put', False, chat_id, 'g' + str(album), {'prompt': caption, 'command': '', 'current': '', 'images': {}}) is not False
+
+def album_caption(chat_id, album):
+	"""The caption noted for an album by remember_album, or None."""
+	record = get(chat_id, 'g' + str(album))
+	return record['prompt'] if record else None
 
 def import_image(chat_id, record_id, caption, command, file_id, created):
 	"""Record a picture that was made before the history existed. Saving the same record_id again replaces it.

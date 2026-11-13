@@ -41,6 +41,7 @@ image_models = {
 image_models[config_telegramBotCommand] = (config_openrouter_image_model, 'the default model')
 # other names for the default command; a name that is already a command of its own is not an alias
 COMMAND_ALIASES = {alias: config_telegramBotCommand for alias in ('imagine',) if alias not in image_models}
+STORE_ONLY_COMMAND = 'storeonly' # recorded as the command of a picture posted with #storeonly; it is not a command the bot answers
 CREDITS_COMMANDS = ('credits', 'tokens', 'usage', 'cost') # show what the bot has spent on OpenRouter
 config_openrouter_text_model = _str('OPENROUTER_TEXT_MODEL', 'meta-llama/llama-3.1-8b-instruct') # cheap model that rewrites prompts for styles
 MIN_PROMPT_WORDS = 3 # shorter typed prompts are ignored; shorter prompts on a button press are expanded by the text model

@@ -29,6 +29,34 @@ def without_mention(text, botName):
 	text = re.sub(r'\s+', ' ', mention_pattern(botName).sub(' ', text)).strip()
 	return re.sub(r'\s+([,.;:!?])', r'\1', text) # "a fox @bot, please" -> "a fox, please"
 
+UPSCALE = re.compile(r'(?<!\w)#upscale(?!\w)', re.IGNORECASE)
+
+def upscale_picture(typing, chat_id, message_id, file_id, prompt, command, model):
+	"""A picture posted with #upscale in its caption: have the image model redraw it at full size, post the result
+	and add it to the image history under the rest of the caption. The small original is not kept."""
+	typing.start()
+	caption = re.sub(r'\s+', ' ', UPSCALE.sub(' ', prompt)).strip() # the tag is not part of the caption
+	print("Detected a picture to upscale; downloading from telegram")
+	image_url = telegram.getFileURL(file_id)
+	if not image_url:
+		return error_to_telegram(chat_id, "error fetching image from Telegram", message_id)
+	success, cropped, image_data = prepare_image(image_url)
+	if not success:
+		return error_to_telegram(chat_id, image_data, message_id)
+	print("Uploading image to OpenRouter to be upscaled")
+	success, image = openrouter.upscale(image_data, model)
+	if not success:
+		return error_to_telegram(chat_id, image or "The image model returned nothing.", message_id)
+	sent = telegram.sendPhoto(chat_id, image, caption or None, message_id)
+	if not sent:
+		return error_to_telegram(chat_id, "The picture was redrawn, but sending it to Telegram failed. Please try again.", message_id)
+	if sent['message_id'] and sent['file_id']:
+		store.save_image(chat_id, sent['message_id'], caption, command, None, sent['file_id'], caption)
+	else:
+		print("The upscaled picture was posted but could not be added to the image history", file=stderr)
+	if cropped:
+		telegram.sendMessage(chat_id, "Note: I centre-cropped your non-square image before sending it to the image model", message_id)
+
 def parse_command(message, botName):
 	"""Work out which model a message asks for. Returns (command, prompt, addressed).
 	'/flux a cat' -> ('flux', 'a cat', True); '@bot a cat' or 'a cat @bot' -> (default command, 'a cat', True).
@@ -106,7 +134,9 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 	now = int(time.time())
 	command, prompt, addressed = parse_command(message, botName)
 	model = image_models[command][0]
-	if file_id:
+	if file_id and UPSCALE.search(message):
+		upscale_picture(typing, chat_id, message_id, file_id, prompt, command, model)
+	elif file_id:
 		print("Detected inbound photo")
 		if addressed or chat_type == 'private':
 			typing.start()
@@ -137,9 +167,11 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 				print("Sending result to Telegram")
 				captions = variation_captions(message, result[2], cropped)
 				if isinstance(image_url, list):
-					telegram.sendMediaGroup(chat_id, image_url, captions, message_id) # one album, so the chat isn't flooded
+					sent = telegram.sendMediaGroup(chat_id, image_url, captions, message_id) # one album, so the chat isn't flooded
 				else:
-					telegram.sendPhoto(chat_id, image_url, captions[0], message_id)
+					sent = telegram.sendPhoto(chat_id, image_url, captions[0], message_id)
+					sent = [sent] if sent else []
+				store.save_variations(chat_id, note, command, sent, [f"{style}, {viewpoint}" for style, viewpoint in result[2]]) # so a gallery can find them
 				if config_archive:
 					if isinstance(image_url, list):
 						for idx, url in enumerate(image_url):
@@ -279,8 +311,8 @@ def prepare_image(image_url):
 	if width != height:
 		print("Cropping to center while preserving shortest edge")
 		crop = min(width, height)
-		left = int(crop/2-crop/2)
-		upper = int(crop/2-crop/2)
+		left = (width - crop) // 2
+		upper = (height - crop) // 2
 		right = left + crop
 		lower = upper + crop
 		im_cropped = im.crop((left, upper, right, lower))
