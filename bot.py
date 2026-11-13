@@ -134,7 +134,8 @@ def forwardedFromThisBot(msg):
 	a forward of one of this bot's own messages."""
 	origin = msg.get("forward_origin") or {}
 	sender = origin.get("sender_user") if origin.get("type") == "user" else msg.get("forward_from") # forward_from: Bot API before 7.0
-	if not sender or not sender.get("is_bot") or not botName or '@' + sender.get("username", "").lower() != botName.lower():
+	me = telegram.botName # not the global botName, which a Slack event replaces
+	if not sender or not sender.get("is_bot") or not me or '@' + sender.get("username", "").lower() != me.lower():
 		return None
 	return origin.get("date") or msg.get("forward_date")
 
@@ -148,7 +149,8 @@ def importForwarded(msg, chat_id, message_id):
 	photo = msg["photo"][-1] # the largest size
 	print("[Telegram forward of our own picture]: adding it to the image history")
 	if store.import_image(chat_id, 'f' + photo["file_unique_id"], msg.get("caption", ""), config_telegramBotCommand, photo["file_id"], int(created)):
-		telegram.setMessageReaction(chat_id, message_id, "👍")
+		if not telegram.setMessageReaction(chat_id, message_id, "👍"): # reactions can be refused; say so in words instead
+			telegram.sendMessage(chat_id, "Saved to the image history.", message_id)
 	else:
 		telegram.sendMessage(chat_id, "Sorry, that picture could not be saved to the image history.", message_id)
 	return True
