@@ -13,7 +13,7 @@ import lib.telegram as telegram
 import lib.openrouter as openrouter
 import lib.store as store
 from lib.multipart import image_type
-from lib.styles import STYLES, with_style
+from lib.styles import STYLES, VIEWPOINTS, with_style
 
 def mention_pattern(botName):
 	"""Matches @botname anywhere in a text (case-insensitive, and not as part of a longer name or an email address)."""
@@ -229,8 +229,8 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 						message = openrouter.expand(message, MIN_PROMPT_WORDS)
 						print("Expanded short prompt:", message)
 					base = message
-					if style_key:
-						# a cheap text model removes words that fight the style
+					if style_key and style_key not in VIEWPOINTS:
+						# a cheap text model removes words that fight the style (a camera angle fights none)
 						base = openrouter.remix(message, STYLES[style_key][1]) or message
 				print("Sending prompt to OpenRouter:", model, style_key)
 				styled = base

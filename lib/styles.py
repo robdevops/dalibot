@@ -4,6 +4,7 @@ STYLES = {
 	'render3d':    ('3D render', 'as a 3D render'),
 	'8bit':        ('8-bit', 'as 8-bit pixel art'),
 	'anime':       ('Anime', 'as anime art'),
+	'birdseye':    ("Bird's eye", "seen from a bird's eye view"),
 	'bw':          ('Black & white', 'in black & white'),
 	'cartoon':     ('Cartoon', 'as a cartoon'),
 	'comicbook':   ('Comic book', 'as a comic book illustration'),
@@ -18,7 +19,12 @@ STYLES = {
 	'ukiyoe':      ('Ukiyo-e', 'as a ukiyo-e woodblock print'),
 	'vangogh':     ('Van Gogh', 'in the style of Vincent van Gogh'),
 	'watercolour': ('Watercolour', 'as a watercolour painting'),
+	'wormseye':    ("Worm's eye", "seen from a worm's eye view"),
 }
+
+# Buttons that change the camera angle, not the art style: the prompt keeps its own style words (an oil painting stays
+# an oil painting, seen from above), and variations don't use them as a style.
+VIEWPOINTS = {'birdseye', 'wormseye'}
 
 import unicodedata
 

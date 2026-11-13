@@ -2,7 +2,7 @@ import urllib.request, urllib.error, http.client, socket, json, base64, concurre
 from sys import stderr
 from lib.config import *
 import lib.deadline as deadline
-from lib.styles import STYLES
+from lib.styles import STYLES, VIEWPOINTS
 
 URL = 'https://openrouter.ai/api/v1/images'
 CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions'
@@ -185,7 +185,7 @@ def variation_looks(note, number):
 		print("Style suggestions failed, using our own lists:", repr(e), file=stderr)
 	styles += [None] * (number - len(styles))
 	viewpoints += [None] * (number - len(viewpoints))
-	left_styles = [cue for label, cue in STYLES.values() if not any(s and same(cue, s) for s in styles)]
+	left_styles = [cue for key, (label, cue) in STYLES.items() if key not in VIEWPOINTS and not any(s and same(cue, s) for s in styles)]
 	left_views = [v for v in FALLBACK_VIEWPOINTS if not any(w and same(v, w) for w in viewpoints)]
 	random.shuffle(left_styles)
 	random.shuffle(left_views)
