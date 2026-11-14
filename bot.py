@@ -27,7 +27,6 @@ from sys import stderr
 from urllib.parse import urlparse
 
 import lib.worker as worker
-from lib.worker import mentions_bot
 import lib.openrouter as openrouter
 import lib.store as store
 import lib.deadline as deadline
@@ -317,13 +316,12 @@ def parseTelegram(inbound):
 		if command in CREDITS_COMMANDS and (addressed or chat_type == "private"):
 			replyCredits(chat_id, user_id, message_id)
 			return
-		# Tagging the bot (or sending a bare command) in reply to a picture asks for variations of that picture,
-		# and a reply with #upscale or #strict works on that picture too. Otherwise a command with a prompt, like
-		# "/dream a red fox", stays a text prompt even when it is a reply.
+		# A reply to a picture works on that picture: variations, with whatever else the reply says as the note, or
+		# one faithful change with #strict, or a redraw at full size with #upscale. A command chooses the model.
+		# In a group the reply must tag the bot or start with a command, so that people can still talk about a
+		# picture without paying for images; in a private chat every reply is for the bot.
 		replied_image = imageFileId(msg.get("reply_to_message") or {})
-		picture_tag = worker.UPSCALE.search(message) or worker.STRICT.search(message)
-		# in a private chat the tag alone is enough: there is no one else the reply could be for
-		if replied_image and (addressed or (picture_tag and chat_type == "private")) and (not prompt or mentions_bot(message, botName) or picture_tag):
+		if replied_image and (addressed or chat_type == "private"):
 			file_id = replied_image
 			print("[Telegram reply to a picture]:", user, message)
 	elif "photo" in msg:
