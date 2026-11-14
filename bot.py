@@ -147,7 +147,8 @@ def importForwarded(msg, chat_id, message_id):
 		return False
 	photo = msg["photo"][-1] # the largest size
 	print("[Telegram forward of our own picture]: adding it to the image history")
-	if store.import_image(chat_id, 'f' + photo["file_unique_id"], msg.get("caption", ""), config_telegramBotCommand, photo["file_id"], int(created)):
+	caption, command = worker.split_model_tag(msg.get("caption", "")) # the model's hashtag says which model made it
+	if store.import_image(chat_id, 'f' + photo["file_unique_id"], caption, command or config_telegramBotCommand, photo["file_id"], int(created)):
 		if not telegram.setMessageReaction(chat_id, message_id, "👍"): # reactions can be refused; say so in words instead
 			telegram.sendMessage(chat_id, "Saved to the image history.", message_id)
 	else:
@@ -222,7 +223,7 @@ def storeOnly(msg, chat_id, message_id, edited=False):
 		if (store.get(chat_id, record_id) or {}).get('images'): # saving would replace it, and with it every style made for it
 			telegram.sendMessage(chat_id, "That picture is already in the image history.", message_id)
 			return True
-		caption = caption or tidy(picture.get("caption") or "") # what the reply says, else the picture's own caption
+		caption = caption or tidy(worker.split_model_tag(picture.get("caption"))[0]) # what the reply says, else the picture's own caption
 	print("[Telegram #storeonly]: adding the picture to the image history")
 	if store.import_image(chat_id, record_id, caption, STORE_ONLY_COMMAND, file_id, int(picture.get("date") or time.time())):
 		if not telegram.setMessageReaction(chat_id, message_id, "👍"): # reactions can be refused; say so in words instead
@@ -357,7 +358,8 @@ def originalPrompt(msg):
 		if addressed and prompt:
 			return prompt
 	# the original message is gone: undo what we added to the caption
-	caption = re.sub(r"\n\nStyle: .*$", "", msg.get("caption") or "", flags=re.S) # captions from older versions
+	caption = worker.split_model_tag(msg.get("caption"))[0]
+	caption = re.sub(r"\n\nStyle: .*$", "", caption, flags=re.S) # captions from older versions
 	for label, cue in STYLES.values():
 		if caption.endswith(", " + cue):
 			return caption[:-len(", " + cue)]
@@ -407,14 +409,14 @@ def parseTelegramCallback(query):
 		cached = record["images"].get(style or store.BASE)
 		if cached:
 			keyboard = telegram.imageKeyboard(command, style)
-			if telegram.editPhoto(chat_id, message_id, cached["file_id"], cached["caption"], keyboard):
+			if telegram.editPhoto(chat_id, message_id, cached["file_id"], worker.tag_caption(cached["caption"], command), keyboard):
 				telegram.answerCallbackQuery(query["id"], f"Showing the {label} image")
 				store.set_current(chat_id, message_id, style)
 				return
 			# This message can't be edited (Telegram refused). The image is saved, so post it as a new message
 			# and carry the history over, instead of paying for a new image.
 			print("[Telegram button]: could not edit the message; posting the stored image as a new message", file=stderr)
-			sent = telegram.sendPhoto(chat_id, cached["file_id"], cached["caption"], reply_markup=keyboard)
+			sent = telegram.sendPhoto(chat_id, cached["file_id"], worker.tag_caption(cached["caption"], command), reply_markup=keyboard)
 			if sent and sent["message_id"]:
 				store.carry_over(chat_id, message_id, sent["message_id"], current=style)
 				telegram.answerCallbackQuery(query["id"], f"Posted the {label} image as a new message")

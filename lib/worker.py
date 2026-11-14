@@ -29,6 +29,42 @@ def without_mention(text, botName):
 	text = re.sub(r'\s+', ' ', mention_pattern(botName).sub(' ', text)).strip()
 	return re.sub(r'\s+([,.;:!?])', r'\1', text) # "a fox @bot, please" -> "a fox, please"
 
+def model_tag(command):
+	"""The hashtag the bot puts on a picture's caption to say which model made it: #gpt, #flux or #qwen. The default
+	command is tagged with the named model it uses, or with a tag made from the model id if it is any other model."""
+	if command in image_models and command != config_telegramBotCommand:
+		return '#' + command
+	model = image_models.get(command, (command,))[0] or ''
+	for name, (other, _) in image_models.items():
+		if other == model and name != config_telegramBotCommand:
+			return '#' + name
+	return '#' + (re.sub(r'[^0-9A-Za-z_]', '', model.split('/')[-1]) or 'image') # e.g. #flux3imageklein
+
+def model_tags():
+	"""Every tag model_tag can give, and the command it stands for (a named model rather than the default command)."""
+	tags = {model_tag(config_telegramBotCommand): config_telegramBotCommand}
+	tags.update({model_tag(name): name for name in image_models if name != config_telegramBotCommand})
+	return tags
+
+def tag_caption(caption, command):
+	"""caption with the model's hashtag on a line of its own at the end, kept within Telegram's caption limit."""
+	tag = model_tag(command)
+	if not caption:
+		return tag
+	room = telegram.CAPTION_MAX - len(tag) - 1
+	if len(caption) > room:
+		caption = caption[:room - 3] + '...'
+	return caption + '\n' + tag
+
+def split_model_tag(caption):
+	"""(caption without the bot's model hashtag, the command the hashtag stands for or None). Only the bot's own tags
+	are taken off, so a user's caption that ends with a hashtag of their own keeps it."""
+	caption = caption or ''
+	found = re.search(r'\s*(#\w+)\s*$', caption)
+	if found and found.group(1) in model_tags():
+		return caption[:found.start()], model_tags()[found.group(1)]
+	return caption, None
+
 UPSCALE = re.compile(r'(?<!\w)#upscale(?!\w)', re.IGNORECASE)
 STRICT = re.compile(r'(?<!\w)#strict(?!\w)', re.IGNORECASE)
 
@@ -50,7 +86,7 @@ def redraw_picture(typing, chat_id, message_id, file_id, caption, command, what,
 	success, image = redraw(image_data)
 	if not success:
 		return error_to_telegram(chat_id, image or "The image model returned nothing.", message_id)
-	sent = telegram.sendPhoto(chat_id, image, caption or None, message_id)
+	sent = telegram.sendPhoto(chat_id, image, tag_caption(caption, command), message_id)
 	if not sent:
 		return error_to_telegram(chat_id, "The picture was redrawn, but sending it to Telegram failed. Please try again.", message_id)
 	if sent['message_id'] and sent['file_id']:
@@ -184,7 +220,7 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 			success, image_url = result[0], result[1]
 			if success:
 				print("Sending result to Telegram")
-				captions = variation_captions(message, result[2], cropped)
+				captions = [tag_caption(caption, command) for caption in variation_captions(message, result[2], cropped)]
 				if isinstance(image_url, list):
 					sent = telegram.sendMediaGroup(chat_id, image_url, captions, message_id) # one album, so the chat isn't flooded
 				else:
@@ -247,14 +283,14 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 					if edit_message_id:
 						pending.wait() # the 'working' edit must land first, or it could overwrite the new image
 						print("Replacing message", edit_message_id, "in place;", len(image_url), "bytes" if isinstance(image_url, bytes) else "(url)")
-						sent = telegram.editPhoto(chat_id, edit_message_id, image_url, caption, keyboard)
+						sent = telegram.editPhoto(chat_id, edit_message_id, image_url, tag_caption(caption, command), keyboard)
 						if sent:
 							sent['message_id'] = edit_message_id
 							pending.replaced = True
 						else:
 							print("In-place edit failed, posting a new image instead", file=stderr)
 					if not sent and telegram.upload_timeout() >= 5: # too close to the Lambda deadline: just say it failed
-						sent = telegram.sendPhoto(chat_id, image_url, caption, message_id, reply_markup=keyboard)
+						sent = telegram.sendPhoto(chat_id, image_url, tag_caption(caption, command), message_id, reply_markup=keyboard)
 					if not sent:
 						error_to_telegram(chat_id, SEND_FAILED, message_id)
 					if sent and sent['message_id'] and sent['file_id']:
