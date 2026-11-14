@@ -30,20 +30,22 @@ def without_mention(text, botName):
 	return re.sub(r'\s+([,.;:!?])', r'\1', text) # "a fox @bot, please" -> "a fox, please"
 
 def model_tag(command):
-	"""The hashtag the bot puts on a picture's caption to say which model made it: #gpt, #flux or #qwen. The default
-	command is tagged with the named model it uses, or with a tag made from the model id if it is any other model."""
-	if command in image_models and command != config_telegramBotCommand:
-		return '#' + command
+	"""The hashtag the bot puts on a picture's caption to say which model made it: #gpt, #flux or #qwen, by the model
+	the command actually uses (so the default command, whatever it is called, gets its model's tag). Any other model
+	gets a tag made from its id."""
 	model = image_models.get(command, (command,))[0] or ''
-	for name, (other, _) in image_models.items():
-		if other == model and name != config_telegramBotCommand:
+	for name, (named, _) in NAMED_MODELS.items():
+		if named == model:
 			return '#' + name
-	return '#' + (re.sub(r'[^0-9A-Za-z_]', '', model.split('/')[-1]) or 'image') # e.g. #flux3imageklein
+	tag = re.sub(r'[^0-9A-Za-z_]', '', model.split('/')[-1]) # e.g. #supermodel9
+	return '#' + (tag if re.search('[A-Za-z]', tag) else 'model' + tag) # Telegram links a hashtag only if it has a letter
 
 def model_tags():
-	"""Every tag model_tag can give, and the command it stands for (a named model rather than the default command)."""
-	tags = {model_tag(config_telegramBotCommand): config_telegramBotCommand}
-	tags.update({model_tag(name): name for name in image_models if name != config_telegramBotCommand})
+	"""Every tag model_tag can give, and the command it stands for (a command named after its model when there is one)."""
+	tags = {}
+	for name in list(NAMED_MODELS) + list(image_models):
+		if name in image_models:
+			tags.setdefault(model_tag(name), name)
 	return tags
 
 def tag_caption(caption, command):
@@ -60,7 +62,7 @@ def split_model_tag(caption):
 	"""(caption without the bot's model hashtag, the command the hashtag stands for or None). Only the bot's own tags
 	are taken off, so a user's caption that ends with a hashtag of their own keeps it."""
 	caption = caption or ''
-	found = re.search(r'\s*(#\w+)\s*$', caption)
+	found = re.search(r'(?:^|\n)(#\w+)\s*$', caption) # the bot's tag is always on a line of its own
 	if found and found.group(1) in model_tags():
 		return caption[:found.start()], model_tags()[found.group(1)]
 	return caption, None

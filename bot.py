@@ -326,7 +326,7 @@ def parseTelegram(inbound):
 			file_id = replied_image
 			print("[Telegram reply to a picture]:", user, message)
 	elif "photo" in msg:
-		message = msg.get("caption", '')
+		message = worker.split_model_tag(msg.get("caption", ''))[0] # a repost of one of our pictures: not part of the note
 		file_id = msg["photo"][-1]["file_id"]
 		print("[Telegram photo]:", user, message)
 		if edited and not worker.parse_command(message, botName)[2]:
@@ -334,7 +334,7 @@ def parseTelegram(inbound):
 			return
 	elif "document" in msg:
 		mime_type = msg["document"]["mime_type"]
-		message = msg.get("caption", '')
+		message = worker.split_model_tag(msg.get("caption", ''))[0]
 		if not mime_type.startswith('image/'):
 			print("[Telegram document unhandled mime_type]:", user, mime_type, message)
 			return

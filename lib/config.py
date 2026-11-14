@@ -38,6 +38,7 @@ image_models = {
 	'flux': ('black-forest-labs/flux-3-image-klein', 'FLUX.3 Klein (fastest)'),
 	'qwen': ('qwen/qwen-image-2.1-turbo', 'Qwen Image 2.1 Turbo'),
 }
+NAMED_MODELS = dict(image_models) # the models with names of their own, before the default command is added (or overrides one)
 image_models[config_telegramBotCommand] = (config_openrouter_image_model, 'the default model')
 # other names for the default command; a name that is already a command of its own is not an alias
 COMMAND_ALIASES = {alias: config_telegramBotCommand for alias in ('imagine',) if alias not in image_models}
