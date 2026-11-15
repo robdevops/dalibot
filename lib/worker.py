@@ -70,12 +70,15 @@ def split_model_tag(caption):
 UPSCALE = re.compile(r'(?<!\w)#upscale(?!\w)', re.IGNORECASE)
 STRICT = re.compile(r'(?<!\w)#(?:strict|variation)(?!\w)', re.IGNORECASE) # #variation is another name for #strict
 
+def is_command(message, name, botName=None):
+	"""Does the message start with /name (or /name@thisbot)? In a group Telegram delivers commands to the bot even
+	without admin access or a mention, so these work there with no @botname."""
+	m = re.match(r'^\s*/(\w+)(@\w+)?(?:\s|$)', message or '')
+	return bool(m and m.group(1).lower() == name and not (m.group(2) and botName and m.group(2).lower() != botName.lower()))
+
 def wants_strict(message, botName=None):
 	"""Does the message ask for one faithful change to a picture: #strict or #variation anywhere, or /variation at the start?"""
-	m = re.match(r'^\s*/(\w+)(@\w+)?(?:\s|$)', message or '')
-	if m and m.group(1).lower() == STRICT_COMMAND and not (m.group(2) and botName and m.group(2).lower() != botName.lower()):
-		return True
-	return bool(STRICT.search(message or ''))
+	return is_command(message, STRICT_COMMAND, botName) or bool(STRICT.search(message or ''))
 
 def without_tag(tag, text):
 	return re.sub(r'\s+', ' ', tag.sub(' ', text)).strip()

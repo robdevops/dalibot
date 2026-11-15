@@ -429,6 +429,7 @@ def setMyCommands():
 			commands.append({'command': name, 'description': 'same, using ' + description})
 	for alias, name in COMMAND_ALIASES.items():
 		commands.append({'command': alias, 'description': 'same as /' + name})
+	commands.append({'command': DELETE_COMMAND, 'description': 'reply to a picture: remove it from the image history'})
 	if STRICT_COMMAND not in image_models:
 		commands.append({'command': STRICT_COMMAND, 'description': 'reply to a picture: change it exactly as you say'})
 	commands.append({'command': CREDITS_COMMANDS[0], 'description': 'show what has been spent on OpenRouter: today, week, month'})

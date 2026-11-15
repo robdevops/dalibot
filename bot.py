@@ -242,9 +242,15 @@ def mayDelete(chat_id, user_id, chat_type):
 def deletePicture(msg, chat_id, user_id, chat_type, message_id):
 	"""A reply of #delete to a picture removes that picture's record from the image history, with every style made
 	for it, so a gallery no longer shows it. The messages in the chat are left alone. Returns True if msg was such a reply."""
-	target = msg.get("reply_to_message")
-	if not target or not imageFileId(target) or not DELETE.search(msg.get("text") or msg.get("caption") or ""):
+	text = msg.get("text") or msg.get("caption") or ""
+	slash = worker.is_command(text, DELETE_COMMAND, botName) # /delete, which needs no @botname in a group
+	if not slash and not DELETE.search(text):
 		return False
+	target = msg.get("reply_to_message")
+	if not target or not imageFileId(target):
+		if slash:
+			telegram.sendMessage(chat_id, "To delete a picture from the image history, reply to it with /delete.", message_id)
+		return slash
 	if not mayDelete(chat_id, user_id, chat_type):
 		print(user_id, "is not allowed to delete pictures. Ignoring.", file=stderr)
 		telegram.sendMessage(chat_id, "Sorry, only the bot's approved users and this group's admins can delete pictures.", message_id)
