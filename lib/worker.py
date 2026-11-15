@@ -68,7 +68,14 @@ def split_model_tag(caption):
 	return caption, None
 
 UPSCALE = re.compile(r'(?<!\w)#upscale(?!\w)', re.IGNORECASE)
-STRICT = re.compile(r'(?<!\w)#strict(?!\w)', re.IGNORECASE)
+STRICT = re.compile(r'(?<!\w)#(?:strict|variation)(?!\w)', re.IGNORECASE) # #variation is another name for #strict
+
+def wants_strict(message, botName=None):
+	"""Does the message ask for one faithful change to a picture: #strict or #variation anywhere, or /variation at the start?"""
+	m = re.match(r'^\s*/(\w+)(@\w+)?(?:\s|$)', message or '')
+	if m and m.group(1).lower() == STRICT_COMMAND and not (m.group(2) and botName and m.group(2).lower() != botName.lower()):
+		return True
+	return bool(STRICT.search(message or ''))
 
 def without_tag(tag, text):
 	return re.sub(r'\s+', ' ', tag.sub(' ', text)).strip()
@@ -109,7 +116,7 @@ def strict_picture(typing, chat_id, message_id, file_id, prompt, command, model)
 	instruction says, with none of the extra styles and viewpoints that variations add."""
 	note = without_tag(STRICT, prompt)
 	if not note:
-		return error_to_telegram(chat_id, "Add what you want after #strict, for example: #strict make it night time", message_id)
+		return error_to_telegram(chat_id, "Add what you want changed, for example: #strict make it night time", message_id)
 	redraw_picture(typing, chat_id, message_id, file_id, note, command, 'change as asked', lambda image: openrouter.strict(image, note, model))
 
 def parse_command(message, botName):
@@ -121,6 +128,10 @@ def parse_command(message, botName):
 	m = re.match(r'^/(\w+)(@\w+)?\s*(.*)$', text, re.S)
 	name = m.group(1).lower() if m else ''
 	name = COMMAND_ALIASES.get(name, name)
+	if name == STRICT_COMMAND and name not in image_models: # /variation: the default model, changing a picture as #strict does
+		if m.group(2) and botName and m.group(2).lower() != botName.lower():
+			return config_telegramBotCommand, text, False
+		return config_telegramBotCommand, without_mention(m.group(3), botName), True
 	if name in image_models or name in CREDITS_COMMANDS:
 		if m.group(2) and botName and m.group(2).lower() != botName.lower():
 			return config_telegramBotCommand, text, False # addressed to a different bot
@@ -191,7 +202,7 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 	model = image_models[command][0]
 	if file_id and UPSCALE.search(message):
 		upscale_picture(typing, chat_id, message_id, file_id, prompt, command, model)
-	elif file_id and STRICT.search(message):
+	elif file_id and wants_strict(message, botName):
 		strict_picture(typing, chat_id, message_id, file_id, prompt, command, model)
 	elif file_id:
 		print("Detected inbound photo")
@@ -246,7 +257,9 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 				error_to_telegram(chat_id, message, message_id)
 
 	else:
-		if addressed or chat_type == 'private':
+		if (addressed or chat_type == 'private') and wants_strict(message, botName) and not (style or edit_message_id):
+			error_to_telegram(chat_id, "That changes a picture: reply to one with it, or post a picture with it in the caption.", message_id)
+		elif addressed or chat_type == 'private':
 			message = prompt # the prompt as the user wrote it; it is also the caption, so buttons can regenerate from it
 			is_button = bool(style or edit_message_id)
 			if len(message.split()) >= MIN_PROMPT_WORDS or is_button:
