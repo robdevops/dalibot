@@ -411,10 +411,18 @@ def parseTelegramCallback(query):
 		telegram.answerCallbackQuery(query["id"])
 		return
 	chat_id, message_id = str(msg["chat"]["id"]), str(msg["message_id"])
+	# One press at a time per message. A double click (or two people pressing) would otherwise run twice, and the
+	# second, finding the message already changed, would post a new message instead of editing this one. Every
+	# return below releases the message, except the last, which hands it to the worker to release when it's done.
+	if not store.claim(chat_id, message_id):
+		print("[Telegram button]: this message is already being changed; ignoring the press", file=stderr)
+		telegram.answerCallbackQuery(query["id"], "Still painting, one moment\u2026")
+		return
 	record = store.get(chat_id, message_id)
 	label = STYLES[style][0] if style else "original"
 	if record and action == "g":
 		if record["current"] == (style or store.BASE):
+			store.release(chat_id, message_id)
 			telegram.answerCallbackQuery(query["id"], f"Already showing the {label} image")
 			return
 		cached = record["images"].get(style or store.BASE)
@@ -423,6 +431,7 @@ def parseTelegramCallback(query):
 			if telegram.editPhoto(chat_id, message_id, cached["file_id"], worker.tag_caption(cached["caption"], command), keyboard):
 				telegram.answerCallbackQuery(query["id"], f"Showing the {label} image")
 				store.set_current(chat_id, message_id, style)
+				store.release(chat_id, message_id)
 				return
 			# This message can't be edited (Telegram refused). The image is saved, so post it as a new message
 			# and carry the history over, instead of paying for a new image.
@@ -431,11 +440,13 @@ def parseTelegramCallback(query):
 			if sent and sent["message_id"]:
 				store.carry_over(chat_id, message_id, sent["message_id"], current=style)
 				telegram.answerCallbackQuery(query["id"], f"Posted the {label} image as a new message")
+				store.release(chat_id, message_id)
 				return
 			print("[Telegram button]: could not post the stored image either, generating a new one", file=stderr)
 	prompt = record["prompt"] if record else originalPrompt(msg)
 	if not prompt:
 		print("[Telegram button]: could not find the original prompt", file=stderr)
+		store.release(chat_id, message_id)
 		telegram.answerCallbackQuery(query["id"], "Sorry, I can't find the original prompt for this image. Please send a new prompt.", alert=True)
 		return
 	telegram.answerCallbackQuery(query["id"], "Remixing..." if action == "r" else f"Painting in the style of {label}..." if style else "Generating...")

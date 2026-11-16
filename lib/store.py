@@ -25,6 +25,7 @@ from sys import stderr
 
 from lib.config import *
 
+BUSY_SECONDS = 240 # how long a button press holds its message: longer than a Lambda run (3 min), in case one dies holding it
 MAX_PREVIOUS = 50 # replaced images kept per message; about 200 bytes to 1 KB each
 BASE = '_' # key for the unstyled image (DynamoDB does not allow empty attribute names)
 
@@ -100,6 +101,22 @@ class SqliteStore:
 
 	def put(self, chat_id, message_id, record):
 		self._modify(chat_id, message_id, lambda _: record)
+
+	def claim(self, chat_id, message_id, seconds):
+		claimed = []
+		def change(record):
+			if record and record.get('busy', 0) > time.time():
+				raise _Busy()
+			claimed.append(True)
+			return {'prompt': '', 'command': '', 'current': '', 'images': {}, 'busy': int(time.time()) + seconds}
+		try:
+			self._modify(chat_id, 'b' + str(message_id), change)
+		except _Busy:
+			return False
+		return True
+
+	def release(self, chat_id, message_id):
+		self._modify(chat_id, 'b' + str(message_id), lambda _: {'prompt': '', 'command': '', 'current': '', 'images': {}, 'busy': 0})
 
 	def import_image(self, chat_id, record_id, caption, command, file_id, created):
 		self._modify(chat_id, record_id, lambda _: imported_record(caption, command, file_id, created))
@@ -196,6 +213,25 @@ class DynamoStore:
 			item['previous'] = record['previous']
 		self.table.put_item(Item=item)
 
+	def claim(self, chat_id, message_id, seconds):
+		from botocore.exceptions import ClientError
+		now = int(time.time())
+		try: # a record of its own, with no images, so nothing that reads the table mistakes it for a picture
+			self.table.put_item(Item={'id': self._id(chat_id, 'b' + str(message_id)), 'prompt': '', 'command': '', 'current': '', 'images': {},
+				'busy': now + seconds, 'ttl': now + seconds + 3600},
+				ConditionExpression='attribute_not_exists(id) OR #busy < :now', ExpressionAttributeNames={'#busy': 'busy'},
+				ExpressionAttributeValues={':now': now})
+		except ClientError as e:
+			if e.response['Error']['Code'] != 'ConditionalCheckFailedException':
+				raise
+			return False
+		return True
+
+	def release(self, chat_id, message_id):
+		now = int(time.time())
+		self.table.put_item(Item={'id': self._id(chat_id, 'b' + str(message_id)), 'prompt': '', 'command': '', 'current': '', 'images': {},
+			'busy': 0, 'ttl': now + 3600})
+
 	def import_image(self, chat_id, record_id, caption, command, file_id, created):
 		self.table.put_item(Item={'id': self._id(chat_id, record_id), 'ttl': int(time.time()) + self.days * 86400,
 			**imported_record(caption, command, file_id, created)})
@@ -242,6 +278,17 @@ def _safely(operation, default, *args):
 	except Exception as e:
 		print(f'Store {operation} failed (continuing without history):', repr(e), file=stderr)
 		return default
+
+class _Busy(Exception):
+	pass
+
+def claim(chat_id, message_id):
+	"""Hold a message while a button press on it is handled, so a second press waits its turn. Returns False if it is
+	already held. If the store can't be reached it returns True: a double click is better than buttons that never work."""
+	return _safely('claim', True, chat_id, message_id, BUSY_SECONDS)
+
+def release(chat_id, message_id):
+	return _safely('release', None, chat_id, message_id)
 
 def get(chat_id, message_id):
 	return _safely('get', None, chat_id, message_id)
