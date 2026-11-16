@@ -1,7 +1,7 @@
 from lib.config import *
 from sys import stderr
 import concurrent.futures
-import urllib.request, urllib.parse, json, socket, io, time
+import urllib.request, urllib.parse, json, socket, io, time, http.client
 import lib.multipart as multipart
 import lib.deadline as deadline
 from lib.styles import STYLES
@@ -138,7 +138,7 @@ def answerCallbackQuery(callback_query_id, text=None, alert=False):
 	req = urllib.request.Request(url, json.dumps(data).encode('utf-8'), {'Content-type': 'application/json'}, method='POST')
 	try:
 		urllib.request.urlopen(req, timeout=config_http_timeout)
-	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
+	except (urllib.error.URLError, OSError, http.client.HTTPException) as e: # incl. a dropped connection, which urllib doesn't wrap
 		print("Failure executing request:", redact(url), str(e), file=stderr)
 		return False
 
@@ -184,7 +184,7 @@ def editButtons(chat_id, message_id, reply_markup):
 	req = urllib.request.Request(url, json.dumps(fields).encode('utf-8'), {'Content-type': 'application/json'}, method='POST')
 	try:
 		urllib.request.urlopen(req, timeout=config_http_timeout)
-	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
+	except (urllib.error.URLError, OSError, http.client.HTTPException) as e: # incl. a dropped connection
 		detail = ''
 		if isinstance(e, urllib.error.HTTPError):
 			try:
@@ -228,6 +228,11 @@ def editPhoto(chat_id, message_id, photo, caption, reply_markup=None):
 			except Exception:
 				pass
 			e.close()
+		if 'message is not modified' in detail:
+			# it already shows exactly this (say a second press of the same button): that is success, not a reason
+			# to post the image again as a new message
+			print(f"Telegram editMessageMedia: message {message_id} already shows this image")
+			return {'message_id': str(message_id), 'file_id': photo if isinstance(photo, str) and not photo.startswith('http') else None}
 		print(f"Telegram editMessageMedia failed for chat {chat_id} message {message_id}:", str(e), detail, file=stderr)
 		return False
 	print("200 OK Telegram editMessageMedia", caption)

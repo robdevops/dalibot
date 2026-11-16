@@ -19,6 +19,7 @@ Storage problems are logged and never stop the bot from generating images.
 """
 import json
 import os
+import uuid
 import sqlite3
 import time
 from sys import stderr
@@ -102,21 +103,26 @@ class SqliteStore:
 	def put(self, chat_id, message_id, record):
 		self._modify(chat_id, message_id, lambda _: record)
 
-	def claim(self, chat_id, message_id, seconds):
-		claimed = []
+	def claim(self, chat_id, message_id, seconds, owner):
 		def change(record):
 			if record and record.get('busy', 0) > time.time():
 				raise _Busy()
-			claimed.append(True)
-			return {'prompt': '', 'command': '', 'current': '', 'images': {}, 'busy': int(time.time()) + seconds}
+			return {'prompt': '', 'command': '', 'current': '', 'images': {}, 'busy': int(time.time()) + seconds, 'owner': owner}
 		try:
 			self._modify(chat_id, 'b' + str(message_id), change)
 		except _Busy:
 			return False
 		return True
 
-	def release(self, chat_id, message_id):
-		self._modify(chat_id, 'b' + str(message_id), lambda _: {'prompt': '', 'command': '', 'current': '', 'images': {}, 'busy': 0})
+	def release(self, chat_id, message_id, owner):
+		def change(record):
+			if not record or record.get('owner') != owner: # it timed out and someone else holds it now
+				raise _Busy()
+			return dict(record, busy=0)
+		try:
+			self._modify(chat_id, 'b' + str(message_id), change)
+		except _Busy:
+			pass
 
 	def import_image(self, chat_id, record_id, caption, command, file_id, created):
 		self._modify(chat_id, record_id, lambda _: imported_record(caption, command, file_id, created))
@@ -146,7 +152,7 @@ class DynamoStore:
 		return f'{chat_id}:{message_id}'
 
 	def get(self, chat_id, message_id):
-		item = self.table.get_item(Key={'id': self._id(chat_id, message_id)}).get('Item')
+		item = self.table.get_item(Key={'id': self._id(chat_id, message_id)}, ConsistentRead=True).get('Item') # see the last press's change
 		if not item or int(item.get('ttl', 0)) < time.time(): # an expired item (a deleted record is one) may linger until DynamoDB removes it
 			return None
 		record = {'prompt': item['prompt'], 'command': item['command'], 'current': item['current'], 'images': item['images']}
@@ -213,12 +219,12 @@ class DynamoStore:
 			item['previous'] = record['previous']
 		self.table.put_item(Item=item)
 
-	def claim(self, chat_id, message_id, seconds):
+	def claim(self, chat_id, message_id, seconds, owner):
 		from botocore.exceptions import ClientError
 		now = int(time.time())
 		try: # a record of its own, with no images, so nothing that reads the table mistakes it for a picture
 			self.table.put_item(Item={'id': self._id(chat_id, 'b' + str(message_id)), 'prompt': '', 'command': '', 'current': '', 'images': {},
-				'busy': now + seconds, 'ttl': now + seconds + 3600},
+				'busy': now + seconds, 'owner': owner, 'ttl': now + seconds + 3600},
 				ConditionExpression='attribute_not_exists(id) OR #busy < :now', ExpressionAttributeNames={'#busy': 'busy'},
 				ExpressionAttributeValues={':now': now})
 		except ClientError as e:
@@ -227,10 +233,16 @@ class DynamoStore:
 			return False
 		return True
 
-	def release(self, chat_id, message_id):
+	def release(self, chat_id, message_id, owner):
+		from botocore.exceptions import ClientError
 		now = int(time.time())
-		self.table.put_item(Item={'id': self._id(chat_id, 'b' + str(message_id)), 'prompt': '', 'command': '', 'current': '', 'images': {},
-			'busy': 0, 'ttl': now + 3600})
+		try: # only our own claim: if ours timed out, someone else may hold it now
+			self.table.put_item(Item={'id': self._id(chat_id, 'b' + str(message_id)), 'prompt': '', 'command': '', 'current': '', 'images': {},
+				'busy': 0, 'owner': owner, 'ttl': now + 3600},
+				ConditionExpression='#owner = :owner', ExpressionAttributeNames={'#owner': 'owner'}, ExpressionAttributeValues={':owner': owner})
+		except ClientError as e:
+			if e.response['Error']['Code'] != 'ConditionalCheckFailedException':
+				raise
 
 	def import_image(self, chat_id, record_id, caption, command, file_id, created):
 		self.table.put_item(Item={'id': self._id(chat_id, record_id), 'ttl': int(time.time()) + self.days * 86400,
@@ -283,12 +295,15 @@ class _Busy(Exception):
 	pass
 
 def claim(chat_id, message_id):
-	"""Hold a message while a button press on it is handled, so a second press waits its turn. Returns False if it is
-	already held. If the store can't be reached it returns True: a double click is better than buttons that never work."""
-	return _safely('claim', True, chat_id, message_id, BUSY_SECONDS)
+	"""Hold a message while a button press on it is handled, so a second press waits its turn. Returns a token to pass
+	to release, or None if the message is already held. If the store can't be reached it returns a token anyway: a
+	double click is better than buttons that never work."""
+	owner = uuid.uuid4().hex
+	return owner if _safely('claim', True, chat_id, message_id, BUSY_SECONDS, owner) else None
 
-def release(chat_id, message_id):
-	return _safely('release', None, chat_id, message_id)
+def release(chat_id, message_id, owner):
+	if owner:
+		_safely('release', None, chat_id, message_id, owner)
 
 def get(chat_id, message_id):
 	return _safely('get', None, chat_id, message_id)

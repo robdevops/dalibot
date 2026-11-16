@@ -197,9 +197,11 @@ def process_request(service, chat_id, user, message, botName, userRealName, chat
 		_process_request(typing, pending, service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id, style, edit_message_id)
 	finally:
 		typing.stop()
-		pending.finish()
-		if button and edit_message_id: # a button press: let the next press on this message through
-			store.release(chat_id, edit_message_id)
+		try:
+			pending.finish()
+		finally:
+			if button and edit_message_id: # a button press: let the next press on this message through
+				store.release(chat_id, edit_message_id, button.get('claim'))
 
 def _process_request(typing, pending, service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id, style, edit_message_id):
 	now = int(time.time())
