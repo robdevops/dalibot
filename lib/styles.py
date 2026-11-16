@@ -1,7 +1,6 @@
 # key: (button label, short phrase appended to the prompt). Kept in alphabetical order of label: the buttons appear in this order.
 # Removing a style leaves its saved images in old records; a press of its button on an old message just refreshes the buttons.
 STYLES = {
-	'render3d':    ('3D render', 'as a 3D render'),
 	'8bit':        ('8-bit', 'as 8-bit pixel art'),
 	'anime':       ('Anime', 'as anime art'),
 	'birdseye':    ("Bird's eye", "seen from a bird's eye view"),
@@ -13,6 +12,7 @@ STYLES = {
 	'ega':         ('EGA', 'as EGA 16-color pixel art'),
 	'lithograph':  ('Lithograph', 'as a lithograph print'),
 	'monet':       ('Monet', 'Monet-inspired'),
+	'naive':       ('Naive', 'naive art style'),
 	'photo':       ('Photo', 'as a photograph'),
 	'popart':      ('Pop art', 'as pop art'),
 	'stamp':       ('Rubber stamp', 'as a rubber stamp print'),
@@ -26,7 +26,7 @@ STYLES = {
 # Phrases of styles that have been removed or renamed: the bot still takes them off an old caption when it has to
 # recover the prompt from one, so 'Pablo Picasso' is not sent back to a model that refuses it.
 RETIRED_CUES = ['in the style of Pablo Picasso', 'in the style of Salvador Dalí', 'as a hand drawn illustration', 'as a pencil sketch',
-	'as a tattoo design', 'as an oil painting', 'in the style of Cubism', 'in the style of Claude Monet', 'in the style of Vincent van Gogh']
+	'as a tattoo design', 'as an oil painting', 'in the style of Cubism', 'in the style of Claude Monet', 'in the style of Vincent van Gogh', 'as a 3D render']
 
 # Buttons that change the camera angle, not the art style: the prompt keeps its own style words (an oil painting stays
 # an oil painting, seen from above), and variations don't use them as a style.
