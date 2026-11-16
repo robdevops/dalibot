@@ -83,7 +83,7 @@ def wants_strict(message, botName=None):
 def without_tag(tag, text):
 	return re.sub(r'\s+', ' ', tag.sub(' ', text)).strip()
 
-def redraw_picture(typing, chat_id, message_id, file_id, caption, command, what, redraw):
+def redraw_picture(typing, chat_id, message_id, file_id, caption, command, what, redraw, style=None):
 	"""Send the user's picture to the image model with redraw(image_data), post the one image that comes back with
 	caption, and add it to the image history under caption. The user's own picture is not kept."""
 	typing.start()
@@ -102,25 +102,25 @@ def redraw_picture(typing, chat_id, message_id, file_id, caption, command, what,
 	if not sent:
 		return error_to_telegram(chat_id, "The picture was redrawn, but sending it to Telegram failed. Please try again.", message_id)
 	if sent['message_id'] and sent['file_id']:
-		store.save_image(chat_id, sent['message_id'], caption, command, None, sent['file_id'], caption)
+		store.save_image(chat_id, sent['message_id'], caption, command, style, sent['file_id'], caption) # filed under the source's style
 	else:
 		print(f"The picture ({what}) was posted but could not be added to the image history", file=stderr)
 	if cropped:
 		telegram.sendMessage(chat_id, "Note: I centre-cropped your non-square image before sending it to the image model", message_id)
 
-def upscale_picture(typing, chat_id, message_id, file_id, prompt, command, model):
+def upscale_picture(typing, chat_id, message_id, file_id, prompt, command, model, style=None):
 	"""A picture posted with #upscale in its caption: have the image model redraw it at full size, post the result
 	and add it to the image history under the rest of the caption. The small original is not kept."""
 	caption = without_tag(UPSCALE, prompt) # the tag is not part of the caption
-	redraw_picture(typing, chat_id, message_id, file_id, caption, command, 'upscale', lambda image: openrouter.upscale(image, model))
+	redraw_picture(typing, chat_id, message_id, file_id, caption, command, 'upscale', lambda image: openrouter.upscale(image, model), style)
 
-def strict_picture(typing, chat_id, message_id, file_id, prompt, command, model):
+def strict_picture(typing, chat_id, message_id, file_id, prompt, command, model, style=None):
 	"""A picture posted with #strict and an instruction in its caption: one image of that picture changed as the
 	instruction says, with none of the extra styles and viewpoints that variations add."""
 	note = without_tag(STRICT, prompt)
 	if not note:
 		return error_to_telegram(chat_id, "Add what you want changed, for example: #strict make it night time", message_id)
-	redraw_picture(typing, chat_id, message_id, file_id, note, command, 'change as asked', lambda image: openrouter.strict(image, note, model))
+	redraw_picture(typing, chat_id, message_id, file_id, note, command, 'change as asked', lambda image: openrouter.strict(image, note, model), style)
 
 def parse_command(message, botName):
 	"""Work out which model a message asks for. Returns (command, prompt, addressed).
@@ -204,9 +204,9 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 	command, prompt, addressed = parse_command(message, botName)
 	model = image_models[command][0]
 	if file_id and UPSCALE.search(message):
-		upscale_picture(typing, chat_id, message_id, file_id, prompt, command, model)
+		upscale_picture(typing, chat_id, message_id, file_id, prompt, command, model, style)
 	elif file_id and wants_strict(message, botName):
-		strict_picture(typing, chat_id, message_id, file_id, prompt, command, model)
+		strict_picture(typing, chat_id, message_id, file_id, prompt, command, model, style)
 	elif file_id:
 		print("Detected inbound photo")
 		if addressed or chat_type == 'private':

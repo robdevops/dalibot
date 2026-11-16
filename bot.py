@@ -281,6 +281,7 @@ def deletePicture(msg, chat_id, user_id, chat_type, message_id):
 def parseTelegram(inbound):
 	"""Extract what the worker needs from a Telegram update. Returns None if it should be ignored."""
 	file_id = False
+	source_style = None # the style of a picture being replied to, for filing the result
 	user = userRealName = ''
 	if "callback_query" in inbound:
 		return parseTelegramCallback(inbound["callback_query"])
@@ -327,9 +328,13 @@ def parseTelegram(inbound):
 		# one faithful change with #strict, or a redraw at full size with #upscale. A command chooses the model.
 		# In a group the reply must tag the bot or start with a command, so that people can still talk about a
 		# picture without paying for images; in a private chat every reply is for the bot.
-		replied_image = imageFileId(msg.get("reply_to_message") or {})
+		replied = msg.get("reply_to_message") or {}
+		replied_image = imageFileId(replied)
 		if replied_image and (addressed or chat_type == "private"):
 			file_id = replied_image
+			# the style the picture is filed under (e.g. Rubber stamp), so a #strict or #upscale of it is filed the same
+			# way. Only the record changes: what is sent to the image model stays the same.
+			source_style = ((store.get(chat_id, str(replied.get("message_id"))) or {}).get("current") or "").replace(store.BASE, "") or None
 			print("[Telegram reply to a picture]:", user, message)
 	elif "photo" in msg:
 		message = worker.split_model_tag(msg.get("caption", ''))[0] # a repost of one of our pictures: not part of the note
@@ -352,7 +357,7 @@ def parseTelegram(inbound):
 	else:
 		print("[telegram]: unhandled message without text/photo/document")
 		return
-	return chat_id, user, userRealName, message, chat_type, message_id, file_id, None, None, None
+	return chat_id, user, userRealName, message, chat_type, message_id, file_id, source_style, None, None
 
 def originalPrompt(msg):
 	"""Recover the prompt a button's image was made from. The caption shows the prompt actually used
