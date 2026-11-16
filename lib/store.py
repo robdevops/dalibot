@@ -6,6 +6,8 @@ earlier image is a single edit with no upload. A record looks like:
     {'prompt': 'a red fox in snow', 'command': 'flux', 'current': 'monet',
      'images': {'_': {'file_id': ..., 'caption': ..., 'base': ...}, 'monet': {...}}}
 
+'_' is the image with no style. When a style's image is replaced (Remix), the one it replaces is kept in 'previous',
+oldest first, as {'style', 'file_id', 'caption', 'base'}, so nothing the bot made is lost from the record.
 '_' is the image with no style. 'base' is the prompt after any expansion and cleanup, before the style
 phrase is added, so Remix can reuse it and skip the text model.
 
@@ -23,6 +25,7 @@ from sys import stderr
 
 from lib.config import *
 
+MAX_PREVIOUS = 50 # replaced images kept per message; about 200 bytes to 1 KB each
 BASE = '_' # key for the unstyled image (DynamoDB does not allow empty attribute names)
 
 def key(style):
@@ -78,6 +81,10 @@ class SqliteStore:
 	def save_image(self, chat_id, message_id, prompt, command, style, file_id, caption, base=None, kind=None):
 		def change(record):
 			record = record or dict({'prompt': prompt, 'command': command, 'images': {}}, **({'kind': kind} if kind else {}))
+			old = record['images'].get(key(style))
+			if old and old.get('file_id') != file_id: # a Remix: keep the image it replaces
+				record['previous'] = (record.get('previous') or []) + [dict(old, style=key(style))]
+				record['previous'] = record['previous'][-MAX_PREVIOUS:]
 			record['images'][key(style)] = {'file_id': file_id, 'caption': caption, 'base': base}
 			record['current'] = key(style)
 			return record
@@ -125,7 +132,10 @@ class DynamoStore:
 		item = self.table.get_item(Key={'id': self._id(chat_id, message_id)}).get('Item')
 		if not item or int(item.get('ttl', 0)) < time.time(): # an expired item (a deleted record is one) may linger until DynamoDB removes it
 			return None
-		return {'prompt': item['prompt'], 'command': item['command'], 'current': item['current'], 'images': item['images']}
+		record = {'prompt': item['prompt'], 'command': item['command'], 'current': item['current'], 'images': item['images']}
+		if item.get('previous'):
+			record['previous'] = item['previous']
+		return record
 
 	def save_image(self, chat_id, message_id, prompt, command, style, file_id, caption, base=None, kind=None):
 		from botocore.exceptions import ClientError
@@ -141,14 +151,28 @@ class DynamoStore:
 		except ClientError as e:
 			if e.response['Error']['Code'] != 'ConditionalCheckFailedException':
 				raise
-		self.table.update_item(Key={'id': id},
+		old = self.table.update_item(Key={'id': id},
 			UpdateExpression='SET images.#k = :image, #cur = :k, #ttl = :ttl',
 			ExpressionAttributeNames={'#k': key(style), '#cur': 'current', '#ttl': 'ttl'},
-			ExpressionAttributeValues={':image': {'file_id': file_id, 'caption': caption, 'base': base}, ':k': key(style), ':ttl': expires})
+			ExpressionAttributeValues={':image': {'file_id': file_id, 'caption': caption, 'base': base}, ':k': key(style), ':ttl': expires},
+			ReturnValues='UPDATED_OLD').get('Attributes', {}).get('images', {}).get(key(style))
+		if old and old.get('file_id') != file_id: # a Remix: keep the image it replaced
+			kept = self.table.update_item(Key={'id': id},
+				UpdateExpression='SET #prev = list_append(if_not_exists(#prev, :none), :old)',
+				ExpressionAttributeNames={'#prev': 'previous'},
+				ExpressionAttributeValues={':none': [], ':old': [dict(old, style=key(style))]},
+				ReturnValues='UPDATED_NEW').get('Attributes', {}).get('previous', [])
+			if len(kept) > MAX_PREVIOUS: # drop the oldest, so the item stays well under DynamoDB's 400 KB
+				self.table.update_item(Key={'id': id},
+					UpdateExpression='REMOVE ' + ', '.join(f'#prev[{i}]' for i in range(len(kept) - MAX_PREVIOUS)),
+					ExpressionAttributeNames={'#prev': 'previous'})
 
 	def put(self, chat_id, message_id, record):
-		self.table.put_item(Item={'id': self._id(chat_id, message_id), 'prompt': record['prompt'], 'command': record['command'],
-			'current': record['current'], 'images': record['images'], 'ttl': int(time.time()) + self.days * 86400})
+		item = {'id': self._id(chat_id, message_id), 'prompt': record['prompt'], 'command': record['command'],
+			'current': record['current'], 'images': record['images'], 'ttl': int(time.time()) + self.days * 86400}
+		if record.get('previous'):
+			item['previous'] = record['previous']
+		self.table.put_item(Item=item)
 
 	def import_image(self, chat_id, record_id, caption, command, file_id, created):
 		self.table.put_item(Item={'id': self._id(chat_id, record_id), 'ttl': int(time.time()) + self.days * 86400,

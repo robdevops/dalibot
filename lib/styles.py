@@ -8,12 +8,12 @@ STYLES = {
 	'bw':          ('Black & white', 'in black & white'),
 	'cartoon':     ('Cartoon', 'as a cartoon'),
 	'comicbook':   ('Comic book', 'as a comic book illustration'),
+	'picasso':     ('Cubism', 'in the style of Cubism'), # was 'Picasso': OpenAI refuses the name. The key stays, so old images still show
 	'cyberpunk':   ('Cyberpunk', 'as cyberpunk art'),
 	'ega':         ('EGA', 'as EGA 16-color pixel art'),
 	'lithograph':  ('Lithograph', 'as a lithograph print'),
 	'monet':       ('Monet', 'in the style of Claude Monet'),
 	'photo':       ('Photo', 'as a photograph'),
-	'picasso':     ('Picasso', 'in the style of Pablo Picasso'),
 	'popart':      ('Pop art', 'as pop art'),
 	'stamp':       ('Rubber stamp', 'as a rubber stamp print'),
 	'stencil':     ('Stencil', 'as stencil art'),
