@@ -8,7 +8,7 @@ earlier image is a single edit with no upload. A record looks like:
 
 '_' is the image with no style. When a style's image is replaced (Remix), the one it replaces is kept in 'previous',
 oldest first, as {'style', 'file_id', 'caption', 'base'}, so nothing the bot made is lost from the record.
-'_' is the image with no style. 'base' is the prompt after any expansion and cleanup, before the style
+'base' is the prompt after any expansion and cleanup, before the style
 phrase is added, so Remix can reuse it and skip the text model.
 
 Each photo of a variations album (made from a photo the user sent) gets its own record too, so a gallery can find them:
@@ -151,21 +151,43 @@ class DynamoStore:
 		except ClientError as e:
 			if e.response['Error']['Code'] != 'ConditionalCheckFailedException':
 				raise
-		old = self.table.update_item(Key={'id': id},
-			UpdateExpression='SET images.#k = :image, #cur = :k, #ttl = :ttl',
-			ExpressionAttributeNames={'#k': key(style), '#cur': 'current', '#ttl': 'ttl'},
-			ExpressionAttributeValues={':image': {'file_id': file_id, 'caption': caption, 'base': base}, ':k': key(style), ':ttl': expires},
-			ReturnValues='UPDATED_OLD').get('Attributes', {}).get('images', {}).get(key(style))
-		if old and old.get('file_id') != file_id: # a Remix: keep the image it replaced
-			kept = self.table.update_item(Key={'id': id},
-				UpdateExpression='SET #prev = list_append(if_not_exists(#prev, :none), :old)',
-				ExpressionAttributeNames={'#prev': 'previous'},
-				ExpressionAttributeValues={':none': [], ':old': [dict(old, style=key(style))]},
-				ReturnValues='UPDATED_NEW').get('Attributes', {}).get('previous', [])
+		image = {'file_id': file_id, 'caption': caption, 'base': base}
+		for attempt in range(3):
+			# Replacing a style's image (a Remix) moves the old one to 'previous' in the same write, on condition that
+			# it is still the one we read, so nothing is lost if this fails half way or races another save.
+			item = self.table.get_item(Key={'id': id}, ProjectionExpression='images.#k', ExpressionAttributeNames={'#k': key(style)}).get('Item') or {}
+			old = (item.get('images') or {}).get(key(style))
+			names = {'#k': key(style), '#cur': 'current', '#ttl': 'ttl'}
+			values = {':image': image, ':k': key(style), ':ttl': expires}
+			update = 'SET images.#k = :image, #cur = :k, #ttl = :ttl'
+			if old:
+				condition = 'images.#k.file_id = :was'
+				values[':was'] = old.get('file_id')
+				if old.get('file_id') != file_id:
+					update += ', #prev = list_append(if_not_exists(#prev, :none), :old)'
+					names['#prev'] = 'previous'
+					values.update({':none': [], ':old': [dict(old, style=key(style))]})
+			else:
+				condition = 'attribute_not_exists(images.#k)'
+			try:
+				kept = self.table.update_item(Key={'id': id}, UpdateExpression=update, ConditionExpression=condition,
+					ExpressionAttributeNames=names, ExpressionAttributeValues=values,
+					ReturnValues='UPDATED_NEW').get('Attributes', {}).get('previous') or []
+			except ClientError as e:
+				if e.response['Error']['Code'] != 'ConditionalCheckFailedException':
+					raise
+				continue # someone else saved this style in between: read again
 			if len(kept) > MAX_PREVIOUS: # drop the oldest, so the item stays well under DynamoDB's 400 KB
-				self.table.update_item(Key={'id': id},
-					UpdateExpression='REMOVE ' + ', '.join(f'#prev[{i}]' for i in range(len(kept) - MAX_PREVIOUS)),
-					ExpressionAttributeNames={'#prev': 'previous'})
+				try: # only if no other save changed the list since, or the indexes would be off
+					self.table.update_item(Key={'id': id},
+						UpdateExpression='REMOVE ' + ', '.join(f'#prev[{i}]' for i in range(len(kept) - MAX_PREVIOUS)),
+						ConditionExpression='size(#prev) = :n', ExpressionAttributeNames={'#prev': 'previous'},
+						ExpressionAttributeValues={':n': len(kept)})
+				except ClientError as e:
+					if e.response['Error']['Code'] != 'ConditionalCheckFailedException':
+						raise
+			return
+		raise RuntimeError('the image kept changing while it was being saved')
 
 	def put(self, chat_id, message_id, record):
 		item = {'id': self._id(chat_id, message_id), 'prompt': record['prompt'], 'command': record['command'],

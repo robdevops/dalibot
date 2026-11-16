@@ -31,7 +31,7 @@ import lib.openrouter as openrouter
 import lib.store as store
 import lib.deadline as deadline
 store.check()
-from lib.styles import STYLES
+from lib.styles import STYLES, RETIRED_CUES
 if config_telegramBotToken:
 	import lib.telegram as telegram
 	botName = telegram.botName
@@ -371,7 +371,7 @@ def originalPrompt(msg):
 	# the original message is gone: undo what we added to the caption
 	caption = worker.split_model_tag(msg.get("caption"))[0]
 	caption = re.sub(r"\n\nStyle: .*$", "", caption, flags=re.S) # captions from older versions
-	for label, cue in STYLES.values():
+	for cue in [cue for label, cue in STYLES.values()] + RETIRED_CUES:
 		if caption.endswith(", " + cue):
 			return caption[:-len(", " + cue)]
 	return caption

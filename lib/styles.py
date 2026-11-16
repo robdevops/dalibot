@@ -23,6 +23,11 @@ STYLES = {
 	'wormseye':    ("Worm's eye", "seen from a worm's eye view"),
 }
 
+# Phrases of styles that have been removed or renamed: the bot still takes them off an old caption when it has to
+# recover the prompt from one, so 'Pablo Picasso' is not sent back to a model that refuses it.
+RETIRED_CUES = ['in the style of Pablo Picasso', 'in the style of Salvador Dalí', 'as a hand drawn illustration', 'as a pencil sketch',
+	'as a tattoo design', 'as an oil painting']
+
 # Buttons that change the camera angle, not the art style: the prompt keeps its own style words (an oil painting stays
 # an oil painting, seen from above), and variations don't use them as a style.
 VIEWPOINTS = {'birdseye', 'wormseye'}
