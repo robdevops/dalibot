@@ -83,16 +83,20 @@ def wants_palette(message, botName=None):
 	"""Does the message ask for a picture's colours: #palette or #hex anywhere, or /palette or /hex at the start?"""
 	return any(is_command(message, name, botName) for name in PALETTE_COMMANDS) or bool(PALETTE.search(message or ''))
 
-def make_palette(file_id, mode='vivid', count=palette.COLOURS):
-	"""(grid PNG, hex codes) of a Telegram picture's main colours, or (None, a message for the user)."""
+def make_palette(file_id, mode='vivid', layout='8'):
+	"""(grid PNG, caption) of a Telegram picture's main colours, or (None, a message for the user). layout is '8' or
+	'16' colours, or 'tones' (shadows, midtones and highlights, a row each). The caption lists the hex codes to copy."""
 	image_url = telegram.getFileURL(file_id)
 	if not image_url:
 		return None, "error fetching image from Telegram"
 	try:
 		with urllib.request.urlopen(image_url, timeout=config_http_timeout) as r:
 			image_data = r.read(20 * 1024 * 1024 + 1) # Telegram lets bots download up to 20 MB
-		hexes = palette.colours(image_data, count, mode)
-		return palette.grid(hexes), hexes
+		if layout == 'tones':
+			bands = palette.tones(image_data, mode)
+			return palette.tones_grid(bands), '\n'.join(f"{name}: {' '.join(hexes) or '-'}" for name, hexes in bands)
+		hexes = palette.colours(image_data, int(layout), mode)
+		return palette.grid(hexes), ' '.join(hexes)
 	except ModuleNotFoundError:
 		return None, "This feature requires the pillow library to be installed"
 	except Exception as e:
@@ -106,10 +110,10 @@ def palette_picture(typing, chat_id, message_id, file_id):
 	Not saved to the image history."""
 	typing.start()
 	print("Detected a picture for its palette; downloading from telegram")
-	grid, hexes = make_palette(file_id)
+	grid, caption = make_palette(file_id)
 	if not grid:
-		return error_to_telegram(chat_id, hexes, message_id)
-	if not telegram.sendPhoto(chat_id, grid, ' '.join(hexes), message_id, reply_markup=telegram.paletteKeyboard()):
+		return error_to_telegram(chat_id, caption, message_id)
+	if not telegram.sendPhoto(chat_id, grid, caption, message_id, reply_markup=telegram.paletteKeyboard()):
 		error_to_telegram(chat_id, SEND_FAILED, message_id)
 
 def wants_upscale(message, botName=None):

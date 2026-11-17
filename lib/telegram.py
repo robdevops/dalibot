@@ -178,23 +178,26 @@ def imageKeyboard(command, style='', pending=None, original=False):
 	return {'inline_keyboard': [first_row] + rows}
 
 PALETTE_LABELS = {'vivid': 'Vivid', 'blend': 'Blend', 'average': 'Average'}
+PALETTE_LAYOUTS = {'8': '8 colours', '16': '16 colours', 'tones': 'Tones'}
 
-def paletteKeyboard(mode='vivid', count=8, pending=None):
-	"""Buttons under a palette: how each colour is shown (the one showing is highlighted) and how many colours.
-	callback_data is 'p:<mode>:<count>'; the highlighted button's is 'p:-:-' (nothing to do). pending=(mode, count)
-	shows the press being worked on: that button gets an hourglass in green, and the others just say "still working"."""
-	other = 16 if count == 8 else 8
-	def button(text, to_mode, to_count, selected=False):
-		b = {'text': text, 'callback_data': 'p:-:-' if selected else f'p:{to_mode}:{to_count}'}
+def paletteKeyboard(mode='vivid', layout='8', pending=None):
+	"""Buttons under a palette: how each colour is shown, and the layout (8 or 16 colours, or Tones: shadows,
+	midtones and highlights). The choices showing are highlighted. callback_data is 'p:<mode>:<layout>'; a highlighted
+	button's is 'p:-:-' (nothing to do). pending=(mode, layout) shows a press being worked on: that button gets an
+	hourglass in green, and the others just say "still working"."""
+	layout = str(layout)
+	def button(text, to_mode, to_layout, selected):
+		b = {'text': text, 'callback_data': 'p:-:-' if selected else f'p:{to_mode}:{to_layout}'}
 		if pending:
 			b['callback_data'] = 'n:-:'
-			if pending == (to_mode, to_count):
+			if pending == (to_mode, to_layout) and not selected:
 				b['text'], b['style'] = '\u23F3 ' + text, 'success'
 		elif selected:
 			b['style'] = 'primary'
 		return b
-	modes = [button(label, key, count, key == mode) for key, label in PALETTE_LABELS.items()]
-	return {'inline_keyboard': [modes, [button(f'{other} colours', mode, other)]]}
+	modes = [button(label, key, layout, key == mode) for key, label in PALETTE_LABELS.items()]
+	layouts = [button(label, mode, key, key == layout) for key, label in PALETTE_LAYOUTS.items()]
+	return {'inline_keyboard': [modes, layouts]}
 
 def retryKeyboard(command, pending=False, action='s'):
 	"""The Retry button under a #strict (/variation) result (action 's') or an #upscale result ('u'): make it again from

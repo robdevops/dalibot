@@ -380,14 +380,14 @@ def originalPrompt(msg):
 	return caption
 
 def paletteButton(query, parts):
-	"""Show a palette another way (vivid, blend or average colours; 8 or 16 of them), in place. The palette replies to
-	the picture it was made from, which is how the picture is found again: nothing about it is saved."""
+	"""Show a palette another way (vivid, blend or average colours; 8 or 16 of them, or Tones), in place. The palette
+	replies to the picture it was made from, which is how the picture is found again: nothing about it is saved."""
 	msg = query["message"]
 	if len(parts) != 3 or parts[1] == "-":
 		telegram.answerCallbackQuery(query["id"], "Already showing this one")
 		return
-	mode, count = parts[1], int(parts[2]) if parts[2].isdigit() else 0
-	if mode not in palette.MODES or count not in (8, 16):
+	mode, layout = parts[1], parts[2]
+	if mode not in palette.MODES or layout not in telegram.PALETTE_LAYOUTS:
 		return
 	chat_type = msg["chat"]["type"]
 	if chat_type == "private" and not telegram_user_allowed(str(query["from"]["id"])):
@@ -404,24 +404,24 @@ def paletteButton(query, parts):
 		return
 	try:
 		telegram.answerCallbackQuery(query["id"])
-		telegram.editButtons(chat_id, message_id, telegram.paletteKeyboard(mode, count, pending=(mode, count)))
-		grid, hexes = worker.make_palette(picture, mode, count)
-		keyboard = telegram.paletteKeyboard(mode, count)
-		if not grid or not telegram.editPhoto(chat_id, message_id, grid, ' '.join(hexes), keyboard):
-			print("[Telegram palette]: could not redraw:", hexes if not grid else "edit failed", file=stderr)
+		telegram.editButtons(chat_id, message_id, telegram.paletteKeyboard(*previousPalette(msg), pending=(mode, layout)))
+		grid, caption = worker.make_palette(picture, mode, layout)
+		keyboard = telegram.paletteKeyboard(mode, layout)
+		if not grid or not telegram.editPhoto(chat_id, message_id, grid, caption, keyboard):
+			print("[Telegram palette]: could not redraw:", caption if not grid else "edit failed", file=stderr)
 			telegram.editButtons(chat_id, message_id, telegram.paletteKeyboard(*previousPalette(msg)))
 			if not grid:
-				telegram.sendMessage(chat_id, hexes, message_id)
+				telegram.sendMessage(chat_id, caption, message_id)
 	finally:
 		store.release(chat_id, message_id, claim)
 
 def previousPalette(msg):
-	"""(mode, count) a palette message showed, read from its buttons, to put them back if a press fails."""
-	rows = (msg.get("reply_markup") or {}).get("inline_keyboard") or []
-	count = 8 if any(b.get("text") == "16 colours" for row in rows for b in row) else 16
-	mode = next((key for row in rows for b in row if b.get("callback_data") == "p:-:-"
-		for key, label in telegram.PALETTE_LABELS.items() if b.get("text") == label), "vivid")
-	return mode, count
+	"""(mode, layout) a palette message showed, read from its highlighted buttons, to show a press on the right
+	keyboard and to put it back if the press fails."""
+	selected = [b.get("text") for row in (msg.get("reply_markup") or {}).get("inline_keyboard") or [] for b in row if b.get("callback_data") == "p:-:-"]
+	mode = next((key for key, label in telegram.PALETTE_LABELS.items() if label in selected), "vivid")
+	layout = next((key for key, label in telegram.PALETTE_LAYOUTS.items() if label in selected), "8")
+	return mode, layout
 
 def parseTelegramCallback(query):
 	"""A press of a button under an image. callback_data is '<action>:<command>:<style>'.
