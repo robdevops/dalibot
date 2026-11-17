@@ -6,6 +6,7 @@ earlier image is a single edit with no upload. A record looks like:
     {'prompt': 'a red fox in snow', 'command': 'flux', 'current': 'monet',
      'images': {'_': {'file_id': ..., 'caption': ..., 'base': ...}, 'monet': {...}}}
 
+'source' (for a #strict result) is the file_id of the picture it was made from, for its Retry button.
 '_' is the image with no style. When a style's image is replaced (Remix), the one it replaces is kept in 'previous',
 oldest first, as {'style', 'file_id', 'caption', 'base'}, so nothing the bot made is lost from the record.
 'base' is the prompt after any expansion and cleanup, before the style
@@ -80,9 +81,9 @@ class SqliteStore:
 		finally:
 			db.close()
 
-	def save_image(self, chat_id, message_id, prompt, command, style, file_id, caption, base=None, kind=None):
+	def save_image(self, chat_id, message_id, prompt, command, style, file_id, caption, base=None, kind=None, source=None):
 		def change(record):
-			record = record or dict({'prompt': prompt, 'command': command, 'images': {}}, **({'kind': kind} if kind else {}))
+			record = record or dict({'prompt': prompt, 'command': command, 'images': {}}, **({'kind': kind} if kind else {}), **({'source': source} if source else {}))
 			old = record['images'].get(key(style))
 			if old and old.get('file_id') != file_id: # a Remix: keep the image it replaces
 				record['previous'] = (record.get('previous') or []) + [dict(old, style=key(style))]
@@ -156,17 +157,20 @@ class DynamoStore:
 		if not item or int(item.get('ttl', 0)) < time.time(): # an expired item (a deleted record is one) may linger until DynamoDB removes it
 			return None
 		record = {'prompt': item['prompt'], 'command': item['command'], 'current': item['current'], 'images': item['images']}
-		if item.get('previous'):
-			record['previous'] = item['previous']
+		for extra in ('previous', 'source'):
+			if item.get(extra):
+				record[extra] = item[extra]
 		return record
 
-	def save_image(self, chat_id, message_id, prompt, command, style, file_id, caption, base=None, kind=None):
+	def save_image(self, chat_id, message_id, prompt, command, style, file_id, caption, base=None, kind=None, source=None):
 		from botocore.exceptions import ClientError
 		id = self._id(chat_id, message_id)
 		expires = int(time.time()) + self.days * 86400 # DynamoDB TTL deletes the item after this
 		item = {'id': id, 'prompt': prompt, 'command': command, 'current': key(style), 'images': {}, 'ttl': expires}
 		if kind:
 			item['kind'] = kind
+		if source:
+			item['source'] = source
 		try: # create the record the first time we see this message
 			self.table.put_item(Item=item,
 				ConditionExpression='attribute_not_exists(id) OR #ttl < :now', # an expired item (a deleted record) is replaced, not added to
@@ -215,8 +219,9 @@ class DynamoStore:
 	def put(self, chat_id, message_id, record):
 		item = {'id': self._id(chat_id, message_id), 'prompt': record['prompt'], 'command': record['command'],
 			'current': record['current'], 'images': record['images'], 'ttl': int(time.time()) + self.days * 86400}
-		if record.get('previous'):
-			item['previous'] = record['previous']
+		for extra in ('previous', 'source'):
+			if record.get(extra):
+				item[extra] = record[extra]
 		self.table.put_item(Item=item)
 
 	def claim(self, chat_id, message_id, seconds, owner):
@@ -308,8 +313,8 @@ def release(chat_id, message_id, owner):
 def get(chat_id, message_id):
 	return _safely('get', None, chat_id, message_id)
 
-def save_image(chat_id, message_id, prompt, command, style, file_id, caption, base=None, kind=None):
-	return _safely('save_image', None, chat_id, message_id, prompt, command, style, file_id, caption, base, kind)
+def save_image(chat_id, message_id, prompt, command, style, file_id, caption, base=None, kind=None, source=None):
+	return _safely('save_image', None, chat_id, message_id, prompt, command, style, file_id, caption, base, kind, source)
 
 def save_variations(chat_id, prompt, command, sent, captions):
 	"""Remember each photo of a variations album: sent is what sendMediaGroup returned (in album order), captions the

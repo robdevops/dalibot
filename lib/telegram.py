@@ -177,6 +177,13 @@ def imageKeyboard(command, style='', pending=None, original=False):
 		first_row.append(button('\u21A9 Original', ''))
 	return {'inline_keyboard': [first_row] + rows}
 
+def retryKeyboard(command, pending=False):
+	"""The Retry button under a #strict (/variation) result: make it again from the same picture and instruction, in place.
+	pending shows it busy (an hourglass, green), like the style buttons while their image is being made."""
+	if pending:
+		return {'inline_keyboard': [[{'text': '\u23F3 Retry', 'callback_data': 'n:-:', 'style': 'success'}]]}
+	return {'inline_keyboard': [[{'text': '\U0001F504 Retry', 'callback_data': f's:{command}:'}]]}
+
 def editButtons(chat_id, message_id, reply_markup):
 	"""Change just the buttons under one of our photo messages, leaving the image and caption alone. Returns True on success."""
 	url = webhooks['telegram'] + "editMessageReplyMarkup"

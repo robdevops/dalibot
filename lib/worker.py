@@ -83,10 +83,14 @@ def wants_strict(message, botName=None):
 def without_tag(tag, text):
 	return re.sub(r'\s+', ' ', tag.sub(' ', text)).strip()
 
-def redraw_picture(typing, chat_id, message_id, file_id, caption, command, what, redraw, style=None):
+def redraw_picture(typing, chat_id, message_id, file_id, caption, command, what, redraw, style=None, keyboard=None, pending=None, edit_message_id=None):
 	"""Send the user's picture to the image model with redraw(image_data), post the one image that comes back with
-	caption, and add it to the image history under caption. The user's own picture is not kept."""
+	caption (and keyboard, if any), and add it to the image history under caption, with the picture's file_id as its
+	source. With edit_message_id (a Retry press) the new image replaces that message's image instead.
+	The user's own picture is not kept."""
 	typing.start()
+	if pending and edit_message_id:
+		pending.start()
 	print(f"Detected a picture to {what}; downloading from telegram")
 	image_url = telegram.getFileURL(file_id)
 	if not image_url:
@@ -98,11 +102,22 @@ def redraw_picture(typing, chat_id, message_id, file_id, caption, command, what,
 	success, image = redraw(image_data)
 	if not success:
 		return error_to_telegram(chat_id, image or "The image model returned nothing.", message_id)
-	sent = telegram.sendPhoto(chat_id, image, tag_caption(caption, command), message_id)
+	sent = False
+	if edit_message_id:
+		pending.wait() # the busy buttons must land first, or they could replace the new ones
+		sent = telegram.editPhoto(chat_id, edit_message_id, image, tag_caption(caption, command), keyboard)
+		if sent:
+			sent['message_id'] = edit_message_id
+			pending.replaced = True
+		else:
+			print("In-place edit failed, posting a new image instead", file=stderr)
+	if not sent:
+		sent = telegram.sendPhoto(chat_id, image, tag_caption(caption, command), message_id, reply_markup=keyboard)
 	if not sent:
 		return error_to_telegram(chat_id, "The picture was redrawn, but sending it to Telegram failed. Please try again.", message_id)
 	if sent['message_id'] and sent['file_id']:
-		store.save_image(chat_id, sent['message_id'], caption, command, style, sent['file_id'], caption) # filed under the source's style
+		# filed under the source's style; a Retry in place keeps the image it replaces in the record's 'previous'
+		store.save_image(chat_id, sent['message_id'], caption, command, style, sent['file_id'], caption, source=file_id)
 	else:
 		print(f"The picture ({what}) was posted but could not be added to the image history", file=stderr)
 	if cropped:
@@ -114,13 +129,14 @@ def upscale_picture(typing, chat_id, message_id, file_id, prompt, command, model
 	caption = without_tag(UPSCALE, prompt) # the tag is not part of the caption
 	redraw_picture(typing, chat_id, message_id, file_id, caption, command, 'upscale', lambda image: openrouter.upscale(image, model), style)
 
-def strict_picture(typing, chat_id, message_id, file_id, prompt, command, model, style=None):
+def strict_picture(typing, chat_id, message_id, file_id, prompt, command, model, style=None, pending=None, edit_message_id=None):
 	"""A picture posted with #strict and an instruction in its caption: one image of that picture changed as the
 	instruction says, with none of the extra styles and viewpoints that variations add."""
 	note = without_tag(STRICT, prompt)
 	if not note:
 		return error_to_telegram(chat_id, "Add what you want changed, for example: #strict make it night time", message_id)
-	redraw_picture(typing, chat_id, message_id, file_id, note, command, 'change as asked', lambda image: openrouter.strict(image, note, model), style)
+	redraw_picture(typing, chat_id, message_id, file_id, note, command, 'change as asked', lambda image: openrouter.strict(image, note, model), style,
+		keyboard=telegram.retryKeyboard(command), pending=pending, edit_message_id=edit_message_id)
 
 def parse_command(message, botName):
 	"""Work out which model a message asks for. Returns (command, prompt, addressed).
@@ -177,8 +193,13 @@ class Pending:
 			self.thread = threading.Thread(target=self._show, daemon=True) # in parallel with generating
 			self.thread.start()
 
+	def _keyboard(self, busy):
+		if self.button['action'] == 's': # Retry under a #strict result
+			return telegram.retryKeyboard(self.command, pending=busy)
+		return telegram.imageKeyboard(self.command, self.button['style'], pending=(self.button['action'], self.button['target']) if busy else None)
+
 	def _show(self):
-		telegram.editButtons(self.chat_id, self.message_id, telegram.imageKeyboard(self.command, self.button['style'], pending=(self.button['action'], self.button['target'])))
+		telegram.editButtons(self.chat_id, self.message_id, self._keyboard(True))
 
 	def wait(self):
 		if self.thread:
@@ -187,7 +208,7 @@ class Pending:
 	def finish(self):
 		if self.thread and not self.replaced:
 			self.wait()
-			telegram.editButtons(self.chat_id, self.message_id, telegram.imageKeyboard(self.command, self.button['style']))
+			telegram.editButtons(self.chat_id, self.message_id, self._keyboard(False))
 
 def process_request(service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id=False, style=None, edit_message_id=None, button=None):
 	typing = Typing(service, chat_id)
@@ -210,7 +231,7 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 	if file_id and UPSCALE.search(message):
 		upscale_picture(typing, chat_id, message_id, file_id, prompt, command, model, style)
 	elif file_id and wants_strict(message, botName):
-		strict_picture(typing, chat_id, message_id, file_id, prompt, command, model, style)
+		strict_picture(typing, chat_id, message_id, file_id, prompt, command, model, style, pending, edit_message_id)
 	elif file_id:
 		print("Detected inbound photo")
 		if addressed or chat_type == 'private':

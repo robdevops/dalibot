@@ -379,7 +379,8 @@ def originalPrompt(msg):
 def parseTelegramCallback(query):
 	"""A press of a button under an image. callback_data is '<action>:<command>:<style>'.
 	Every press replaces the image in place. 'g' goes to a style: if we already made that image it is shown
-	straight away from the store (no model calls); otherwise, and for 'r' (Remix), a new one is generated."""
+	straight away from the store (no model calls); otherwise, and for 'r' (Remix), a new one is generated.
+	's' (Retry, under a #strict result) makes it again from the same picture and instruction."""
 	if "message" not in query:
 		return
 	data = query.get("data", "")
@@ -389,7 +390,7 @@ def parseTelegramCallback(query):
 	if parts[0] == "n": # a button on an image that is still being made
 		telegram.answerCallbackQuery(query["id"], "Still painting, one moment\u2026")
 		return
-	if len(parts) != 3 or parts[0] not in ("g", "r") or parts[1] not in image_models:
+	if len(parts) != 3 or parts[0] not in ("g", "r", "s") or parts[1] not in image_models:
 		return
 	action, command, style = parts
 	msg = query["message"]
@@ -421,6 +422,19 @@ def parseTelegramCallback(query):
 		return
 	try:
 		record = store.get(chat_id, message_id)
+		if action == "s": # Retry: the same #strict request again, from the picture it was made from
+			if not record or not record.get("source"):
+				store.release(chat_id, message_id, claim)
+				telegram.answerCallbackQuery(query["id"], "Sorry, I can't find the picture this was made from.", alert=True)
+				return
+			telegram.answerCallbackQuery(query["id"], "Trying again\u2026")
+			user = '@' + sender["username"] if "username" in sender else '@' + sender["first_name"]
+			reply_to = msg.get("reply_to_message", {}).get("message_id")
+			kept_style = (record.get("current") or "").replace(store.BASE, "") or None # stays filed as it was
+			print("[Telegram button]: retry", command, record["prompt"], f"(on message {message_id} in chat {chat_id})")
+			button = {'action': 's', 'target': '', 'style': '', 'claim': claim}
+			return (chat_id, user, sender["first_name"], '/' + command + ' #strict ' + record["prompt"], chat_type,
+				str(reply_to) if reply_to else None, record["source"], kept_style, message_id, button)
 		label = STYLES[style][0] if style else "original"
 		if record and action == "g":
 			if record["current"] == (style or store.BASE):
