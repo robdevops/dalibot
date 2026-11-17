@@ -8,8 +8,17 @@ COLOURS = 8 # tiles in the grid, most common colour first
 COLUMNS = 4
 TILE = 256 # pixels per side of each tile
 
+GROUPS = 24 # colour groups found first; the COLOURS shown are chosen from these
+MIN_DIFFERENCE = 24 # how different (CIE Lab distance) two chosen colours must look; about 2 is barely visible
+
 def colours(image_bytes, number=COLOURS):
-	"""The picture's main colours as hex codes ('#1A2B3C'), most common first. Raises if the picture can't be read."""
+	"""The picture's main colours as hex codes ('#1A2B3C'), most common first. Raises if the picture can't be read.
+
+	The pixels are sorted into GROUPS colour groups. From each, the colour shown is the most vivid colour that is
+	common in it (a colour that really appears, not the group's average, which shading pulls darker and greyer).
+	The groups are then chosen by both how much of the picture they cover and how vivid they are, skipping any
+	that look almost the same as one already chosen, so a small bright accent can win a place over a third shade
+	of dark grey."""
 	from PIL import Image
 	im = Image.open(io.BytesIO(image_bytes))
 	if im.mode in ('RGBA', 'LA', 'P', 'PA') or 'transparency' in im.info:
@@ -19,17 +28,56 @@ def colours(image_bytes, number=COLOURS):
 		im = background
 	else:
 		im = im.convert('RGB')
-	im.thumbnail((200, 200)) # plenty to find the main colours, and fast
-	# median cut, refined by k-means, picks colours that actually cover the picture rather than a fixed palette
-	quantized = im.quantize(colors=number, method=Image.Quantize.MEDIANCUT, kmeans=2)
-	palette = quantized.getpalette()
-	counts = sorted(quantized.getcolors(), reverse=True) # [(pixels, palette index)], biggest share first
-	hexes = []
-	for count, index in counts:
-		code = '#{:02X}{:02X}{:02X}'.format(*palette[index * 3:index * 3 + 3])
-		if code not in hexes:
-			hexes.append(code)
-	return hexes
+	im.thumbnail((160, 160)) # plenty to find the main colours, and fast
+	flat = getattr(im, 'get_flattened_data', im.getdata) # getdata is going in Pillow 14
+	pixels = list(flat())
+	groups = {}
+	quantized = im.quantize(colors=GROUPS, method=Image.Quantize.MEDIANCUT, kmeans=2)
+	for pixel, group in zip(pixels, getattr(quantized, 'get_flattened_data', quantized.getdata)()):
+		groups.setdefault(group, []).append(pixel)
+	candidates = [] # (score, share, colour)
+	for members in groups.values():
+		colour = vivid_common(members)
+		share = len(members) / len(pixels)
+		# area counts, and so does standing out: being colourful, or being light (pale wings in a dark picture)
+		candidates.append((share ** 0.6 * (0.45 + chroma(colour) / 255 + 0.35 * lab(colour)[0] / 100), share, colour))
+	candidates.sort(reverse=True)
+	chosen = []
+	for limit in (MIN_DIFFERENCE, MIN_DIFFERENCE / 2): # a second, looser pass if a picture has few distinct colours
+		for score, share, colour in candidates:
+			if len(chosen) < number and all(difference(colour, other) >= limit for _, other in chosen):
+				chosen.append((share, colour))
+	chosen.sort(reverse=True) # most common first
+	return ['#{:02X}{:02X}{:02X}'.format(*colour) for share, colour in chosen]
+
+def chroma(colour):
+	"""How colourful an (r, g, b) colour is, 0 for grey to 255 for a pure hue."""
+	return max(colour) - min(colour)
+
+def vivid_common(members):
+	"""The colour that best represents one group: among the shades it contains (grouped into small steps), the one
+	that is both common and vivid. Returns the most frequent actual pixel colour in that shade."""
+	shades = {}
+	for pixel in members:
+		shades.setdefault((pixel[0] >> 3, pixel[1] >> 3, pixel[2] >> 3), []).append(pixel)
+	best = max(shades.values(), key=lambda shade: len(shade) ** 0.5 * (0.25 + chroma(shade[0]) / 255) ** 2) # favour the bright red of an eye over its dark edge
+	counts = {}
+	for pixel in best:
+		counts[pixel] = counts.get(pixel, 0) + 1
+	return max(counts, key=counts.get)
+
+def lab(colour):
+	"""(r, g, b) to CIE Lab, where the distance between two colours follows how different they look."""
+	def linear(c):
+		c /= 255
+		return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+	r, g, b = (linear(c) for c in colour)
+	x, y, z = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047, 0.2126 * r + 0.7152 * g + 0.0722 * b, (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883
+	f = lambda t: t ** (1 / 3) if t > 0.008856 else 7.787 * t + 16 / 116
+	return 116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z))
+
+def difference(a, b):
+	return sum((p - q) ** 2 for p, q in zip(lab(a), lab(b))) ** 0.5
 
 def label_colour(code):
 	"""Black or white, whichever reads better on this colour (by its relative luminance)."""
