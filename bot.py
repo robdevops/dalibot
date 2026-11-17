@@ -27,6 +27,7 @@ from sys import stderr
 from urllib.parse import urlparse
 
 import lib.worker as worker
+import lib.palette as palette
 import lib.openrouter as openrouter
 import lib.store as store
 import lib.deadline as deadline
@@ -335,6 +336,8 @@ def parseTelegram(inbound):
 			# the style the picture is filed under (e.g. Rubber stamp), so a #strict or #upscale of it is filed the same
 			# way. Only the record changes: what is sent to the image model stays the same.
 			source_style = ((store.get(chat_id, str(replied.get("message_id"))) or {}).get("current") or "").replace(store.BASE, "") or None
+			if worker.wants_palette(message, botName):
+				message_id = str(replied.get("message_id")) # the palette replies to the picture, so its buttons can find it
 			print("[Telegram reply to a picture]:", user, message)
 	elif "photo" in msg:
 		message = worker.split_model_tag(msg.get("caption", ''))[0] # a repost of one of our pictures: not part of the note
@@ -376,6 +379,50 @@ def originalPrompt(msg):
 			return caption[:-len(", " + cue)]
 	return caption
 
+def paletteButton(query, parts):
+	"""Show a palette another way (vivid, blend or average colours; 8 or 16 of them), in place. The palette replies to
+	the picture it was made from, which is how the picture is found again: nothing about it is saved."""
+	msg = query["message"]
+	if len(parts) != 3 or parts[1] == "-":
+		telegram.answerCallbackQuery(query["id"], "Already showing this one")
+		return
+	mode, count = parts[1], int(parts[2]) if parts[2].isdigit() else 0
+	if mode not in palette.MODES or count not in (8, 16):
+		return
+	chat_type = msg["chat"]["type"]
+	if chat_type == "private" and not telegram_user_allowed(str(query["from"]["id"])):
+		telegram.answerCallbackQuery(query["id"])
+		return
+	picture = imageFileId(msg.get("reply_to_message") or {})
+	if not picture:
+		telegram.answerCallbackQuery(query["id"], "Sorry, I can't find the picture this palette was made from.", alert=True)
+		return
+	chat_id, message_id = str(msg["chat"]["id"]), str(msg["message_id"])
+	claim = store.claim(chat_id, message_id)
+	if not claim:
+		telegram.answerCallbackQuery(query["id"], "Still painting, one moment\u2026")
+		return
+	try:
+		telegram.answerCallbackQuery(query["id"])
+		telegram.editButtons(chat_id, message_id, telegram.paletteKeyboard(mode, count, pending=(mode, count)))
+		grid, hexes = worker.make_palette(picture, mode, count)
+		keyboard = telegram.paletteKeyboard(mode, count)
+		if not grid or not telegram.editPhoto(chat_id, message_id, grid, ' '.join(hexes), keyboard):
+			print("[Telegram palette]: could not redraw:", hexes if not grid else "edit failed", file=stderr)
+			telegram.editButtons(chat_id, message_id, telegram.paletteKeyboard(*previousPalette(msg)))
+			if not grid:
+				telegram.sendMessage(chat_id, hexes, message_id)
+	finally:
+		store.release(chat_id, message_id, claim)
+
+def previousPalette(msg):
+	"""(mode, count) a palette message showed, read from its buttons, to put them back if a press fails."""
+	rows = (msg.get("reply_markup") or {}).get("inline_keyboard") or []
+	count = 8 if any(b.get("text") == "16 colours" for row in rows for b in row) else 16
+	mode = next((key for row in rows for b in row if b.get("callback_data") == "p:-:-"
+		for key, label in telegram.PALETTE_LABELS.items() if b.get("text") == label), "vivid")
+	return mode, count
+
 def parseTelegramCallback(query):
 	"""A press of a button under an image. callback_data is '<action>:<command>:<style>'.
 	Every press replaces the image in place. 'g' goes to a style: if we already made that image it is shown
@@ -390,6 +437,8 @@ def parseTelegramCallback(query):
 	if parts[0] == "n": # a button on an image that is still being made
 		telegram.answerCallbackQuery(query["id"], "Still painting, one moment\u2026")
 		return
+	if parts[0] == "p": # a button under a palette
+		return paletteButton(query, parts)
 	if len(parts) != 3 or parts[0] not in ("g", "r", "s", "u") or parts[1] not in image_models:
 		return
 	action, command, style = parts

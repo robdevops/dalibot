@@ -83,25 +83,33 @@ def wants_palette(message, botName=None):
 	"""Does the message ask for a picture's colours: #palette or #hex anywhere, or /palette or /hex at the start?"""
 	return any(is_command(message, name, botName) for name in PALETTE_COMMANDS) or bool(PALETTE.search(message or ''))
 
-def palette_picture(typing, chat_id, message_id, file_id):
-	"""Reply with a grid of the picture's main colours, each tile labelled with its hex code, and the codes as text in
-	the caption so they can be copied. Made here with Pillow, so no model is asked. Not saved to the image history."""
-	typing.start()
-	print("Detected a picture for its palette; downloading from telegram")
+def make_palette(file_id, mode='vivid', count=palette.COLOURS):
+	"""(grid PNG, hex codes) of a Telegram picture's main colours, or (None, a message for the user)."""
 	image_url = telegram.getFileURL(file_id)
 	if not image_url:
-		return error_to_telegram(chat_id, "error fetching image from Telegram", message_id)
+		return None, "error fetching image from Telegram"
 	try:
 		with urllib.request.urlopen(image_url, timeout=config_http_timeout) as r:
 			image_data = r.read(20 * 1024 * 1024 + 1) # Telegram lets bots download up to 20 MB
-		hexes = palette.colours(image_data)
-		grid = palette.grid(hexes)
+		hexes = palette.colours(image_data, count, mode)
+		return palette.grid(hexes), hexes
 	except ModuleNotFoundError:
-		return error_to_telegram(chat_id, "This feature requires the pillow library to be installed", message_id)
+		return None, "This feature requires the pillow library to be installed"
 	except Exception as e:
 		print("Palette failed:", repr(e), file=stderr)
-		return error_to_telegram(chat_id, "Sorry, I couldn't read the colours of that picture.", message_id)
-	if not telegram.sendPhoto(chat_id, grid, ' '.join(hexes), message_id):
+		return None, "Sorry, I couldn't read the colours of that picture."
+
+def palette_picture(typing, chat_id, message_id, file_id):
+	"""Reply to the picture (message_id) with a grid of its main colours, each tile labelled with its hex code, the
+	codes as text in the caption so they can be copied, and buttons to show them another way. Replying to the picture
+	itself is what lets a button find it again, so nothing needs saving. Made here with Pillow, so no model is asked.
+	Not saved to the image history."""
+	typing.start()
+	print("Detected a picture for its palette; downloading from telegram")
+	grid, hexes = make_palette(file_id)
+	if not grid:
+		return error_to_telegram(chat_id, hexes, message_id)
+	if not telegram.sendPhoto(chat_id, grid, ' '.join(hexes), message_id, reply_markup=telegram.paletteKeyboard()):
 		error_to_telegram(chat_id, SEND_FAILED, message_id)
 
 def wants_upscale(message, botName=None):

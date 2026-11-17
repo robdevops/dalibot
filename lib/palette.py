@@ -4,21 +4,26 @@ Everything happens here with Pillow: no image model is asked, so it costs nothin
 image history, because it is a tool, not a picture."""
 import io
 
-COLOURS = 8 # tiles in the grid, most common colour first
+COLOURS = 8 # tiles in the grid, most common colour first (16 with the "16 colours" button)
 COLUMNS = 4
 TILE = 256 # pixels per side of each tile
 
-GROUPS = 24 # colour groups found first; the COLOURS shown are chosen from these
+GROUPS = 24 # colour groups found first; the colours shown are chosen from these
 MIN_DIFFERENCE = 24 # how different (CIE Lab distance) two chosen colours must look; about 2 is barely visible
+LIGHT = 80 # Lab lightness from which a colour counts as light (cream, white)
+LIGHT_SHARE = 0.03 # a light area at least this big always gets a tile
+MODES = ('vivid', 'blend', 'average')
 
-def colours(image_bytes, number=COLOURS):
+def colours(image_bytes, number=COLOURS, mode='vivid'):
 	"""The picture's main colours as hex codes ('#1A2B3C'), most common first. Raises if the picture can't be read.
 
-	The pixels are sorted into GROUPS colour groups. From each, the colour shown is the most vivid colour that is
-	common in it (a colour that really appears, not the group's average, which shading pulls darker and greyer).
-	The groups are then chosen by both how much of the picture they cover and how vivid they are, skipping any
-	that look almost the same as one already chosen, so a small bright accent can win a place over a third shade
-	of dark grey."""
+	The pixels are sorted into GROUPS colour groups. Groups are chosen by both how much of the picture they cover and
+	how much they stand out (colourful, or light), skipping any that look almost the same as one already chosen, so a
+	small bright accent can win a place over a third shade of dark grey. A light area (white fur, a cream band) of at
+	least LIGHT_SHARE always gets a tile.
+	mode is how each chosen group is shown: 'vivid', the most vivid colour that is common in it (a colour that really
+	appears); 'average', the average of its pixels, which shading pulls darker and greyer; 'blend', halfway between.
+	The same groups are chosen in every mode, so the modes can be compared tile by tile."""
 	from PIL import Image
 	im = Image.open(io.BytesIO(image_bytes))
 	if im.mode in ('RGBA', 'LA', 'P', 'PA') or 'transparency' in im.info:
@@ -35,20 +40,34 @@ def colours(image_bytes, number=COLOURS):
 	quantized = im.quantize(colors=GROUPS, method=Image.Quantize.MEDIANCUT, kmeans=2)
 	for pixel, group in zip(pixels, getattr(quantized, 'get_flattened_data', quantized.getdata)()):
 		groups.setdefault(group, []).append(pixel)
-	candidates = [] # (score, share, colour)
+	candidates = [] # (score, share, vivid colour, members)
 	for members in groups.values():
 		colour = vivid_common(members)
 		share = len(members) / len(pixels)
 		# area counts, and so does standing out: being colourful, or being light (pale wings in a dark picture)
-		candidates.append((share ** 0.6 * (0.45 + chroma(colour) / 255 + 0.35 * lab(colour)[0] / 100), share, colour))
-	candidates.sort(reverse=True)
+		candidates.append((share ** 0.6 * (0.45 + chroma(colour) / 255 + 0.35 * lab(colour)[0] / 100), share, colour, members))
+	candidates.sort(key=lambda c: c[0], reverse=True)
 	chosen = []
 	for limit in (MIN_DIFFERENCE, MIN_DIFFERENCE / 2): # a second, looser pass if a picture has few distinct colours
-		for score, share, colour in candidates:
-			if len(chosen) < number and all(difference(colour, other) >= limit for _, other in chosen):
-				chosen.append((share, colour))
-	chosen.sort(reverse=True) # most common first
-	return ['#{:02X}{:02X}{:02X}'.format(*colour) for share, colour in chosen]
+		for candidate in candidates:
+			if len(chosen) < number and candidate not in chosen and all(difference(candidate[2], other[2]) >= limit for other in chosen):
+				chosen.append(candidate)
+	is_light = lambda candidate: lab(candidate[2])[0] >= LIGHT
+	if not any(is_light(c) for c in chosen):
+		lights = sorted((c for c in candidates if is_light(c)), key=lambda c: c[1], reverse=True)
+		light = sum(c[1] for c in lights) # all light groups together: white fur can be spread over several
+		if lights and light >= LIGHT_SHARE:
+			if len(chosen) >= number:
+				chosen.pop() # the last one chosen stood out least
+			chosen.append(lights[0])
+	chosen.sort(key=lambda c: c[1], reverse=True) # most common first
+	shown = []
+	for score, share, colour, members in chosen:
+		if mode != 'vivid':
+			average = tuple(sum(p[i] for p in members) / len(members) for i in range(3))
+			colour = average if mode == 'average' else tuple((a + v) / 2 for a, v in zip(average, colour))
+		shown.append('#{:02X}{:02X}{:02X}'.format(*(round(c) for c in colour)))
+	return shown
 
 def chroma(colour):
 	"""How colourful an (r, g, b) colour is, 0 for grey to 255 for a pure hue."""

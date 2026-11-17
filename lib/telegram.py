@@ -177,6 +177,25 @@ def imageKeyboard(command, style='', pending=None, original=False):
 		first_row.append(button('\u21A9 Original', ''))
 	return {'inline_keyboard': [first_row] + rows}
 
+PALETTE_LABELS = {'vivid': 'Vivid', 'blend': 'Blend', 'average': 'Average'}
+
+def paletteKeyboard(mode='vivid', count=8, pending=None):
+	"""Buttons under a palette: how each colour is shown (the one showing is highlighted) and how many colours.
+	callback_data is 'p:<mode>:<count>'; the highlighted button's is 'p:-:-' (nothing to do). pending=(mode, count)
+	shows the press being worked on: that button gets an hourglass in green, and the others just say "still working"."""
+	other = 16 if count == 8 else 8
+	def button(text, to_mode, to_count, selected=False):
+		b = {'text': text, 'callback_data': 'p:-:-' if selected else f'p:{to_mode}:{to_count}'}
+		if pending:
+			b['callback_data'] = 'n:-:'
+			if pending == (to_mode, to_count):
+				b['text'], b['style'] = '\u23F3 ' + text, 'success'
+		elif selected:
+			b['style'] = 'primary'
+		return b
+	modes = [button(label, key, count, key == mode) for key, label in PALETTE_LABELS.items()]
+	return {'inline_keyboard': [modes, [button(f'{other} colours', mode, other)]]}
+
 def retryKeyboard(command, pending=False, action='s'):
 	"""The Retry button under a #strict (/variation) result (action 's') or an #upscale result ('u'): make it again from
 	the same picture (and instruction), in place. pending shows it busy (an hourglass, green), like the style buttons
