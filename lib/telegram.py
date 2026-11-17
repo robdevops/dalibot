@@ -177,12 +177,13 @@ def imageKeyboard(command, style='', pending=None, original=False):
 		first_row.append(button('\u21A9 Original', ''))
 	return {'inline_keyboard': [first_row] + rows}
 
-def retryKeyboard(command, pending=False):
-	"""The Retry button under a #strict (/variation) result: make it again from the same picture and instruction, in place.
-	pending shows it busy (an hourglass, green), like the style buttons while their image is being made."""
+def retryKeyboard(command, pending=False, action='s'):
+	"""The Retry button under a #strict (/variation) result (action 's') or an #upscale result ('u'): make it again from
+	the same picture (and instruction), in place. pending shows it busy (an hourglass, green), like the style buttons
+	while their image is being made."""
 	if pending:
 		return {'inline_keyboard': [[{'text': '\u23F3 Retry', 'callback_data': 'n:-:', 'style': 'success'}]]}
-	return {'inline_keyboard': [[{'text': '\U0001F504 Retry', 'callback_data': f's:{command}:'}]]}
+	return {'inline_keyboard': [[{'text': '\U0001F504 Retry', 'callback_data': f'{action}:{command}:'}]]}
 
 def editButtons(chat_id, message_id, reply_markup):
 	"""Change just the buttons under one of our photo messages, leaving the image and caption alone. Returns True on success."""
@@ -442,6 +443,8 @@ def setMyCommands():
 	for alias, name in COMMAND_ALIASES.items():
 		commands.append({'command': alias, 'description': 'same as /' + name})
 	commands.append({'command': DELETE_COMMAND, 'description': 'reply to a picture: remove it from the image history'})
+	if UPSCALE_COMMAND not in image_models:
+		commands.append({'command': UPSCALE_COMMAND, 'description': 'reply to a picture: redraw it at full size'})
 	if STRICT_COMMAND not in image_models:
 		commands.append({'command': STRICT_COMMAND, 'description': 'reply to a picture: change it exactly as you say'})
 	commands.append({'command': CREDITS_COMMANDS[0], 'description': 'show what has been spent on OpenRouter: today, week, month'})

@@ -43,6 +43,7 @@ image_models[config_telegramBotCommand] = (config_openrouter_image_model, 'the d
 # other names for the default command; a name that is already a command of its own is not an alias
 COMMAND_ALIASES = {alias: config_telegramBotCommand for alias in ('imagine',) if alias not in image_models}
 DELETE_COMMAND = 'delete' # /delete does what #delete does
+UPSCALE_COMMAND = 'upscale' # /upscale does what #upscale does, with the default model
 STRICT_COMMAND = 'variation' # /variation does what #strict does: one faithful change to a picture, with the default model
 STORE_ONLY_COMMAND = 'storeonly' # recorded as the command of a picture posted with #storeonly; it is not a command the bot answers
 CREDITS_COMMANDS = ('credits', 'tokens', 'usage', 'cost') # show what the bot has spent on OpenRouter

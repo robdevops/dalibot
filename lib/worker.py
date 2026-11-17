@@ -76,6 +76,10 @@ def is_command(message, name, botName=None):
 	m = re.match(r'^\s*/(\w+)(@\w+)?(?:\s|$)', message or '')
 	return bool(m and m.group(1).lower() == name and not (m.group(2) and botName and m.group(2).lower() != botName.lower()))
 
+def wants_upscale(message, botName=None):
+	"""Does the message ask for a picture to be redrawn at full size: #upscale anywhere, or /upscale at the start?"""
+	return is_command(message, UPSCALE_COMMAND, botName) or bool(UPSCALE.search(message or ''))
+
 def wants_strict(message, botName=None):
 	"""Does the message ask for one faithful change to a picture: #strict or #variation anywhere, or /variation at the start?"""
 	return is_command(message, STRICT_COMMAND, botName) or bool(STRICT.search(message or ''))
@@ -123,11 +127,12 @@ def redraw_picture(typing, chat_id, message_id, file_id, caption, command, what,
 	if cropped:
 		telegram.sendMessage(chat_id, "Note: I centre-cropped your non-square image before sending it to the image model", message_id)
 
-def upscale_picture(typing, chat_id, message_id, file_id, prompt, command, model, style=None):
+def upscale_picture(typing, chat_id, message_id, file_id, prompt, command, model, style=None, pending=None, edit_message_id=None):
 	"""A picture posted with #upscale in its caption: have the image model redraw it at full size, post the result
 	and add it to the image history under the rest of the caption. The small original is not kept."""
 	caption = without_tag(UPSCALE, prompt) # the tag is not part of the caption
-	redraw_picture(typing, chat_id, message_id, file_id, caption, command, 'upscale', lambda image: openrouter.upscale(image, model), style)
+	redraw_picture(typing, chat_id, message_id, file_id, caption, command, 'upscale', lambda image: openrouter.upscale(image, model), style,
+		keyboard=telegram.retryKeyboard(command, action='u'), pending=pending, edit_message_id=edit_message_id)
 
 def strict_picture(typing, chat_id, message_id, file_id, prompt, command, model, style=None, pending=None, edit_message_id=None):
 	"""A picture posted with #strict and an instruction in its caption: one image of that picture changed as the
@@ -147,7 +152,7 @@ def parse_command(message, botName):
 	m = re.match(r'^/(\w+)(@\w+)?\s*(.*)$', text, re.S)
 	name = m.group(1).lower() if m else ''
 	name = COMMAND_ALIASES.get(name, name)
-	if name == STRICT_COMMAND and name not in image_models: # /variation: the default model, changing a picture as #strict does
+	if name in (STRICT_COMMAND, UPSCALE_COMMAND) and name not in image_models: # /variation, /upscale: the default model, on a picture
 		if m.group(2) and botName and m.group(2).lower() != botName.lower():
 			return config_telegramBotCommand, text, False
 		return config_telegramBotCommand, without_mention(m.group(3), botName), True
@@ -194,8 +199,8 @@ class Pending:
 			self.thread.start()
 
 	def _keyboard(self, busy):
-		if self.button['action'] == 's': # Retry under a #strict result
-			return telegram.retryKeyboard(self.command, pending=busy)
+		if self.button['action'] in ('s', 'u'): # Retry under a #strict or #upscale result
+			return telegram.retryKeyboard(self.command, pending=busy, action=self.button['action'])
 		return telegram.imageKeyboard(self.command, self.button['style'], pending=(self.button['action'], self.button['target']) if busy else None)
 
 	def _show(self):
@@ -228,8 +233,8 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 	now = int(time.time())
 	command, prompt, addressed = parse_command(message, botName)
 	model = image_models[command][0]
-	if file_id and UPSCALE.search(message):
-		upscale_picture(typing, chat_id, message_id, file_id, prompt, command, model, style)
+	if file_id and wants_upscale(message, botName):
+		upscale_picture(typing, chat_id, message_id, file_id, prompt, command, model, style, pending, edit_message_id)
 	elif file_id and wants_strict(message, botName):
 		strict_picture(typing, chat_id, message_id, file_id, prompt, command, model, style, pending, edit_message_id)
 	elif file_id:
@@ -285,7 +290,7 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 				error_to_telegram(chat_id, message, message_id)
 
 	else:
-		if (addressed or chat_type == 'private') and wants_strict(message, botName) and not (style or edit_message_id):
+		if (addressed or chat_type == 'private') and (wants_strict(message, botName) or wants_upscale(message, botName)) and not (style or edit_message_id):
 			error_to_telegram(chat_id, "That changes a picture: reply to one with it, or post a picture with it in the caption.", message_id)
 		elif addressed or chat_type == 'private':
 			message = prompt # the prompt as the user wrote it; it is also the caption, so buttons can regenerate from it

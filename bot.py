@@ -168,7 +168,7 @@ def withAlbumCaption(msg, chat_id):
 	if not album or not imageFileId(msg):
 		return msg
 	caption = msg.get("caption") or ""
-	tagged = lambda text: STORE_ONLY.search(text) or worker.UPSCALE.search(text) or worker.wants_strict(text, botName)
+	tagged = lambda text: STORE_ONLY.search(text) or worker.wants_upscale(text, botName) or worker.wants_strict(text, botName)
 	if caption:
 		# noted whether it is tagged or not, so the album's other pictures stop waiting as soon as it has been seen
 		store.remember_album(chat_id, album, caption)
@@ -380,7 +380,7 @@ def parseTelegramCallback(query):
 	"""A press of a button under an image. callback_data is '<action>:<command>:<style>'.
 	Every press replaces the image in place. 'g' goes to a style: if we already made that image it is shown
 	straight away from the store (no model calls); otherwise, and for 'r' (Remix), a new one is generated.
-	's' (Retry, under a #strict result) makes it again from the same picture and instruction."""
+	's' and 'u' (Retry, under a #strict or #upscale result) make it again from the same picture (and instruction)."""
 	if "message" not in query:
 		return
 	data = query.get("data", "")
@@ -390,7 +390,7 @@ def parseTelegramCallback(query):
 	if parts[0] == "n": # a button on an image that is still being made
 		telegram.answerCallbackQuery(query["id"], "Still painting, one moment\u2026")
 		return
-	if len(parts) != 3 or parts[0] not in ("g", "r", "s") or parts[1] not in image_models:
+	if len(parts) != 3 or parts[0] not in ("g", "r", "s", "u") or parts[1] not in image_models:
 		return
 	action, command, style = parts
 	msg = query["message"]
@@ -422,7 +422,7 @@ def parseTelegramCallback(query):
 		return
 	try:
 		record = store.get(chat_id, message_id)
-		if action == "s": # Retry: the same #strict request again, from the picture it was made from
+		if action in ("s", "u"): # Retry: the same #strict or #upscale request again, from the picture it was made from
 			if not record or not record.get("source"):
 				store.release(chat_id, message_id, claim)
 				telegram.answerCallbackQuery(query["id"], "Sorry, I can't find the picture this was made from.", alert=True)
@@ -432,8 +432,9 @@ def parseTelegramCallback(query):
 			reply_to = msg.get("reply_to_message", {}).get("message_id")
 			kept_style = (record.get("current") or "").replace(store.BASE, "") or None # stays filed as it was
 			print("[Telegram button]: retry", command, record["prompt"], f"(on message {message_id} in chat {chat_id})")
-			button = {'action': 's', 'target': '', 'style': '', 'claim': claim}
-			return (chat_id, user, sender["first_name"], '/' + command + ' #strict ' + record["prompt"], chat_type,
+			button = {'action': action, 'target': '', 'style': '', 'claim': claim}
+			tag = ' #strict ' if action == "s" else ' #upscale '
+			return (chat_id, user, sender["first_name"], '/' + command + tag + record["prompt"], chat_type,
 				str(reply_to) if reply_to else None, record["source"], kept_style, message_id, button)
 		label = STYLES[style][0] if style else "original"
 		if record and action == "g":
