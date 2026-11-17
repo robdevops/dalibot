@@ -12,6 +12,7 @@ from lib.config import *
 import lib.telegram as telegram
 import lib.openrouter as openrouter
 import lib.store as store
+import lib.palette as palette
 from lib.multipart import image_type
 from lib.styles import STYLES, VIEWPOINTS, with_style
 
@@ -75,6 +76,33 @@ def is_command(message, name, botName=None):
 	without admin access or a mention, so these work there with no @botname."""
 	m = re.match(r'^\s*/(\w+)(@\w+)?(?:\s|$)', message or '')
 	return bool(m and m.group(1).lower() == name and not (m.group(2) and botName and m.group(2).lower() != botName.lower()))
+
+PALETTE = re.compile(r'(?<!\w)#(?:palette|hex)(?!\w)', re.IGNORECASE)
+
+def wants_palette(message, botName=None):
+	"""Does the message ask for a picture's colours: #palette or #hex anywhere, or /palette or /hex at the start?"""
+	return any(is_command(message, name, botName) for name in PALETTE_COMMANDS) or bool(PALETTE.search(message or ''))
+
+def palette_picture(typing, chat_id, message_id, file_id):
+	"""Reply with a grid of the picture's main colours, each tile labelled with its hex code, and the codes as text in
+	the caption so they can be copied. Made here with Pillow, so no model is asked. Not saved to the image history."""
+	typing.start()
+	print("Detected a picture for its palette; downloading from telegram")
+	image_url = telegram.getFileURL(file_id)
+	if not image_url:
+		return error_to_telegram(chat_id, "error fetching image from Telegram", message_id)
+	try:
+		with urllib.request.urlopen(image_url, timeout=config_http_timeout) as r:
+			image_data = r.read(20 * 1024 * 1024 + 1) # Telegram lets bots download up to 20 MB
+		hexes = palette.colours(image_data)
+		grid = palette.grid(hexes)
+	except ModuleNotFoundError:
+		return error_to_telegram(chat_id, "This feature requires the pillow library to be installed", message_id)
+	except Exception as e:
+		print("Palette failed:", repr(e), file=stderr)
+		return error_to_telegram(chat_id, "Sorry, I couldn't read the colours of that picture.", message_id)
+	if not telegram.sendPhoto(chat_id, grid, ' '.join(hexes), message_id):
+		error_to_telegram(chat_id, SEND_FAILED, message_id)
 
 def wants_upscale(message, botName=None):
 	"""Does the message ask for a picture to be redrawn at full size: #upscale anywhere, or /upscale at the start?"""
@@ -152,7 +180,7 @@ def parse_command(message, botName):
 	m = re.match(r'^/(\w+)(@\w+)?\s*(.*)$', text, re.S)
 	name = m.group(1).lower() if m else ''
 	name = COMMAND_ALIASES.get(name, name)
-	if name in (STRICT_COMMAND, UPSCALE_COMMAND) and name not in image_models: # /variation, /upscale: the default model, on a picture
+	if name in (STRICT_COMMAND, UPSCALE_COMMAND) + PALETTE_COMMANDS and name not in image_models: # commands that work on a picture
 		if m.group(2) and botName and m.group(2).lower() != botName.lower():
 			return config_telegramBotCommand, text, False
 		return config_telegramBotCommand, without_mention(m.group(3), botName), True
@@ -233,7 +261,9 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 	now = int(time.time())
 	command, prompt, addressed = parse_command(message, botName)
 	model = image_models[command][0]
-	if file_id and wants_upscale(message, botName):
+	if file_id and wants_palette(message, botName):
+		palette_picture(typing, chat_id, message_id, file_id)
+	elif file_id and wants_upscale(message, botName):
 		upscale_picture(typing, chat_id, message_id, file_id, prompt, command, model, style, pending, edit_message_id)
 	elif file_id and wants_strict(message, botName):
 		strict_picture(typing, chat_id, message_id, file_id, prompt, command, model, style, pending, edit_message_id)
@@ -290,7 +320,7 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 				error_to_telegram(chat_id, message, message_id)
 
 	else:
-		if (addressed or chat_type == 'private') and (wants_strict(message, botName) or wants_upscale(message, botName)) and not (style or edit_message_id):
+		if (addressed or chat_type == 'private') and any(wants(message, botName) for wants in (wants_strict, wants_upscale, wants_palette)) and not (style or edit_message_id):
 			error_to_telegram(chat_id, "That changes a picture: reply to one with it, or post a picture with it in the caption.", message_id)
 		elif addressed or chat_type == 'private':
 			message = prompt # the prompt as the user wrote it; it is also the caption, so buttons can regenerate from it

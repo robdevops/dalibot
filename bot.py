@@ -168,7 +168,7 @@ def withAlbumCaption(msg, chat_id):
 	if not album or not imageFileId(msg):
 		return msg
 	caption = msg.get("caption") or ""
-	tagged = lambda text: STORE_ONLY.search(text) or worker.wants_upscale(text, botName) or worker.wants_strict(text, botName)
+	tagged = lambda text: STORE_ONLY.search(text) or any(wants(text, botName) for wants in (worker.wants_upscale, worker.wants_strict, worker.wants_palette))
 	if caption:
 		# noted whether it is tagged or not, so the album's other pictures stop waiting as soon as it has been seen
 		store.remember_album(chat_id, album, caption)

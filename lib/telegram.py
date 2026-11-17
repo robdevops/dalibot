@@ -443,6 +443,7 @@ def setMyCommands():
 	for alias, name in COMMAND_ALIASES.items():
 		commands.append({'command': alias, 'description': 'same as /' + name})
 	commands.append({'command': DELETE_COMMAND, 'description': 'reply to a picture: remove it from the image history'})
+	commands.append({'command': PALETTE_COMMANDS[0], 'description': "reply to a picture: its main colours, with hex codes"})
 	if UPSCALE_COMMAND not in image_models:
 		commands.append({'command': UPSCALE_COMMAND, 'description': 'reply to a picture: redraw it at full size'})
 	if STRICT_COMMAND not in image_models:
