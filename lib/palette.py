@@ -12,7 +12,7 @@ GROUPS = 24 # colour groups found first; the colours shown are chosen from these
 MIN_DIFFERENCE = 24 # how different (CIE Lab distance) two chosen colours must look; about 2 is barely visible
 LIGHT = 80 # Lab lightness from which a colour counts as light (cream, white)
 LIGHT_SHARE = 0.03 # a light area at least this big always gets a tile
-MODES = ('vivid', 'blend', 'average')
+MODES = ('vivid', 'average')
 
 TONES = (('Shadows', 0, 35), ('Midtones', 35, 70), ('Highlights', 70, 101)) # bands of Lab lightness
 TONE_COLOURS = 4 # tiles per band in the Tones view
@@ -55,7 +55,7 @@ def choose(pixels, number=COLOURS, mode='vivid', light_tile=True):
 	small bright accent can win a place over a third shade of dark grey. With light_tile, a light area (white fur,
 	a cream band) of at least LIGHT_SHARE always gets a tile.
 	mode is how each chosen group is shown: 'vivid', the most vivid colour that is common in it (a colour that really
-	appears); 'average', the average of its pixels, which shading pulls darker and greyer; 'blend', halfway between.
+	appears); or 'average', the average of its pixels, which shading pulls darker and greyer.
 	The same groups are chosen in every mode, so the modes can be compared tile by tile."""
 	from PIL import Image
 	im = Image.new('RGB', (len(pixels), 1))
@@ -87,9 +87,8 @@ def choose(pixels, number=COLOURS, mode='vivid', light_tile=True):
 	chosen.sort(key=lambda c: c[1], reverse=True) # most common first
 	shown = []
 	for score, share, colour, members in chosen:
-		if mode != 'vivid':
-			average = tuple(sum(p[i] for p in members) / len(members) for i in range(3))
-			colour = average if mode == 'average' else tuple((a + v) / 2 for a, v in zip(average, colour))
+		if mode == 'average':
+			colour = tuple(sum(p[i] for p in members) / len(members) for i in range(3))
 		shown.append('#{:02X}{:02X}{:02X}'.format(*(round(c) for c in colour)))
 	return shown
 

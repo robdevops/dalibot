@@ -380,14 +380,16 @@ def originalPrompt(msg):
 	return caption
 
 def paletteButton(query, parts):
-	"""Show a palette another way (vivid, blend or average colours; 8 or 16 of them, or Tones), in place. The palette
+	"""Show a palette another way (vivid or average colours; 8 or 16 of them, or Tones), in place. The palette
 	replies to the picture it was made from, which is how the picture is found again: nothing about it is saved."""
 	msg = query["message"]
 	if len(parts) != 3 or parts[1] == "-":
 		telegram.answerCallbackQuery(query["id"], "Already showing this one")
 		return
 	mode, layout = parts[1], parts[2]
-	if mode not in palette.MODES or layout not in telegram.PALETTE_LAYOUTS:
+	if mode not in palette.MODES: # an option since removed (Blend), on an older palette: show Vivid
+		mode = 'vivid'
+	if layout not in telegram.PALETTE_LAYOUTS:
 		return
 	chat_type = msg["chat"]["type"]
 	if chat_type == "private" and not telegram_user_allowed(str(query["from"]["id"])):

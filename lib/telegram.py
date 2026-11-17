@@ -177,7 +177,7 @@ def imageKeyboard(command, style='', pending=None, original=False):
 		first_row.append(button('\u21A9 Original', ''))
 	return {'inline_keyboard': [first_row] + rows}
 
-PALETTE_LABELS = {'vivid': 'Vivid', 'blend': 'Blend', 'average': 'Average'}
+PALETTE_LABELS = {'vivid': 'Vivid', 'average': 'Average'}
 PALETTE_LAYOUTS = {'8': '8 colours', '16': '16 colours', 'tones': 'Tones'}
 
 def paletteKeyboard(mode='vivid', layout='8', pending=None):
