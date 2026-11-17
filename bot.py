@@ -335,7 +335,9 @@ def parseTelegram(inbound):
 			file_id = replied_image
 			# the style the picture is filed under (e.g. Rubber stamp), so a #strict or #upscale of it is filed the same
 			# way. Only the record changes: what is sent to the image model stays the same.
-			source_style = ((store.get(chat_id, str(replied.get("message_id"))) or {}).get("current") or "").replace(store.BASE, "") or None
+			source = store.get(chat_id, str(replied.get("message_id"))) or {}
+			if source.get("command") != PALETTE_COMMAND: # a palette's views ('vivid-8') are not styles to file a result under
+				source_style = (source.get("current") or "").replace(store.BASE, "") or None
 			if worker.wants_palette(message, botName):
 				message_id = str(replied.get("message_id")) # the palette replies to the picture, so its buttons can find it
 			print("[Telegram reply to a picture]:", user, message)
@@ -406,10 +408,17 @@ def paletteButton(query, parts):
 		return
 	try:
 		telegram.answerCallbackQuery(query["id"])
+		keyboard = telegram.paletteKeyboard(mode, layout)
+		view = (store.get(chat_id, message_id) or {}).get("images", {}).get(f'{mode}-{layout}')
+		if view and telegram.editPhoto(chat_id, message_id, view["file_id"], view["caption"], keyboard):
+			store.set_current(chat_id, message_id, f'{mode}-{layout}') # a view made before: no need to draw it again
+			return
 		telegram.editButtons(chat_id, message_id, telegram.paletteKeyboard(*previousPalette(msg), pending=(mode, layout)))
 		grid, caption = worker.make_palette(picture, mode, layout)
-		keyboard = telegram.paletteKeyboard(mode, layout)
-		if not grid or not telegram.editPhoto(chat_id, message_id, grid, caption, keyboard):
+		sent = grid and telegram.editPhoto(chat_id, message_id, grid, caption, keyboard)
+		if sent:
+			worker.save_palette(chat_id, dict(sent, message_id=message_id), caption, mode, layout, picture)
+		else:
 			print("[Telegram palette]: could not redraw:", caption if not grid else "edit failed", file=stderr)
 			telegram.editButtons(chat_id, message_id, telegram.paletteKeyboard(*previousPalette(msg)))
 			if not grid:

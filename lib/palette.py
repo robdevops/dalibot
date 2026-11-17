@@ -1,7 +1,7 @@
 """The main colours of a picture, drawn as a grid of tiles each labelled with its hex code (#palette, #hex).
 
-Everything happens here with Pillow: no image model is asked, so it costs nothing. The result is not saved to the
-image history, because it is a tool, not a picture."""
+Everything happens here with Pillow: no image model is asked, so it costs nothing. The bot records the result with
+kind 'palette', so a gallery can leave palettes out."""
 import io
 
 COLOURS = 8 # tiles in the grid, most common colour first (16 with the "16 colours" button)

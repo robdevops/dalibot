@@ -106,15 +106,24 @@ def make_palette(file_id, mode='vivid', layout='8'):
 def palette_picture(typing, chat_id, message_id, file_id):
 	"""Reply to the picture (message_id) with a grid of its main colours, each tile labelled with its hex code, the
 	codes as text in the caption so they can be copied, and buttons to show them another way. Replying to the picture
-	itself is what lets a button find it again, so nothing needs saving. Made here with Pillow, so no model is asked.
-	Not saved to the image history."""
+	itself is what lets a button find it again. Made here with Pillow, so no model is asked. Recorded with kind
+	'palette' (see save_palette)."""
 	typing.start()
 	print("Detected a picture for its palette; downloading from telegram")
 	grid, caption = make_palette(file_id)
 	if not grid:
 		return error_to_telegram(chat_id, caption, message_id)
-	if not telegram.sendPhoto(chat_id, grid, caption, message_id, reply_markup=telegram.paletteKeyboard()):
-		error_to_telegram(chat_id, SEND_FAILED, message_id)
+	sent = telegram.sendPhoto(chat_id, grid, caption, message_id, reply_markup=telegram.paletteKeyboard())
+	if not sent:
+		return error_to_telegram(chat_id, SEND_FAILED, message_id)
+	save_palette(chat_id, sent, caption, 'vivid', '8', file_id)
+
+def save_palette(chat_id, sent, caption, mode, layout, source=None):
+	"""Record a palette view: kind 'palette' and command 'palette', so a gallery can leave palettes out. Each view
+	(mode and layout, e.g. 'vivid-8', 'average-tones') is kept under its own key, so a button can show it again
+	without redrawing it."""
+	if sent and sent.get('message_id') and sent.get('file_id'):
+		store.save_image(chat_id, sent['message_id'], caption, PALETTE_COMMAND, f'{mode}-{layout}', sent['file_id'], caption, kind='palette', source=source)
 
 def wants_upscale(message, botName=None):
 	"""Does the message ask for a picture to be redrawn at full size: #upscale anywhere, or /upscale at the start?"""
