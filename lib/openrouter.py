@@ -2,7 +2,7 @@ import urllib.request, urllib.error, http.client, socket, json, base64, concurre
 from sys import stderr
 from lib.config import *
 import lib.deadline as deadline
-from lib.styles import STYLES
+from lib.styles import STYLES, VIEWPOINTS
 
 URL = 'https://openrouter.ai/api/v1/images'
 CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions'
@@ -185,7 +185,7 @@ def variation_looks(note, number):
 		print("Style suggestions failed, using our own lists:", repr(e), file=stderr)
 	styles += [None] * (number - len(styles))
 	viewpoints += [None] * (number - len(viewpoints))
-	left_styles = [cue for label, cue in STYLES.values() if not any(s and same(cue, s) for s in styles)]
+	left_styles = [cue for key, (label, cue) in STYLES.items() if key not in VIEWPOINTS and not any(s and same(cue, s) for s in styles)]
 	left_views = [v for v in FALLBACK_VIEWPOINTS if not any(w and same(v, w) for w in viewpoints)]
 	random.shuffle(left_styles)
 	random.shuffle(left_views)
@@ -224,6 +224,19 @@ UPSCALE_PROMPT = (
 	"and the art style exactly as they are. Only sharpen it and add fine detail and texture where the original is blurry, blocky "
 	"or noisy. Do not add, remove, move, crop or restyle anything."
 )
+
+# For #strict: one image that does what the user asked to their picture, and nothing more.
+STRICT_PROMPT = (
+	"Change this image exactly as the following instructions say, and do nothing else: {note}\n"
+	"Keep everything the instructions do not ask to change as it is: the subject, the composition, the colours, the lighting "
+	"and the art style."
+)
+
+def strict(image_bytes, note, model=None):
+	"""One image: the user's picture changed as their note says, without the styles and viewpoints variations add.
+	Returns (True, image_bytes) or (False, error message)."""
+	data_url = 'data:image/png;base64,' + base64.b64encode(image_bytes).decode()
+	return _request({'prompt': STRICT_PROMPT.format(note=note), 'input_references': [{'type': 'image_url', 'image_url': {'url': data_url}}]}, model)
 
 def upscale(image_bytes, model=None):
 	"""Redraw a small or soft image as faithfully as the model can, at the model's full size.

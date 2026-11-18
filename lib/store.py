@@ -6,7 +6,10 @@ earlier image is a single edit with no upload. A record looks like:
     {'prompt': 'a red fox in snow', 'command': 'flux', 'current': 'monet',
      'images': {'_': {'file_id': ..., 'caption': ..., 'base': ...}, 'monet': {...}}}
 
-'_' is the image with no style. 'base' is the prompt after any expansion and cleanup, before the style
+'source' (for a #strict result) is the file_id of the picture it was made from, for its Retry button.
+'_' is the image with no style. When a style's image is replaced (Remix), the one it replaces is kept in 'previous',
+oldest first, as {'style', 'file_id', 'caption', 'base'}, so nothing the bot made is lost from the record.
+'base' is the prompt after any expansion and cleanup, before the style
 phrase is added, so Remix can reuse it and skip the text model.
 
 Each photo of a variations album (made from a photo the user sent) gets its own record too, so a gallery can find them:
@@ -17,12 +20,15 @@ Storage problems are logged and never stop the bot from generating images.
 """
 import json
 import os
+import uuid
 import sqlite3
 import time
 from sys import stderr
 
 from lib.config import *
 
+BUSY_SECONDS = 240 # how long a button press holds its message: longer than a Lambda run (3 min), in case one dies holding it
+MAX_PREVIOUS = 50 # replaced images kept per message; about 200 bytes to 1 KB each
 BASE = '_' # key for the unstyled image (DynamoDB does not allow empty attribute names)
 
 def key(style):
@@ -75,9 +81,13 @@ class SqliteStore:
 		finally:
 			db.close()
 
-	def save_image(self, chat_id, message_id, prompt, command, style, file_id, caption, base=None, kind=None):
+	def save_image(self, chat_id, message_id, prompt, command, style, file_id, caption, base=None, kind=None, source=None):
 		def change(record):
-			record = record or dict({'prompt': prompt, 'command': command, 'images': {}}, **({'kind': kind} if kind else {}))
+			record = record or dict({'prompt': prompt, 'command': command, 'images': {}}, **({'kind': kind} if kind else {}), **({'source': source} if source else {}))
+			old = record['images'].get(key(style))
+			if old and old.get('file_id') != file_id: # a Remix: keep the image it replaces
+				record['previous'] = (record.get('previous') or []) + [dict(old, style=key(style))]
+				record['previous'] = record['previous'][-MAX_PREVIOUS:]
 			record['images'][key(style)] = {'file_id': file_id, 'caption': caption, 'base': base}
 			record['current'] = key(style)
 			return record
@@ -93,6 +103,27 @@ class SqliteStore:
 
 	def put(self, chat_id, message_id, record):
 		self._modify(chat_id, message_id, lambda _: record)
+
+	def claim(self, chat_id, message_id, seconds, owner):
+		def change(record):
+			if record and record.get('busy', 0) > time.time():
+				raise _Busy()
+			return {'prompt': '', 'command': '', 'current': '', 'images': {}, 'busy': int(time.time()) + seconds, 'owner': owner}
+		try:
+			self._modify(chat_id, 'b' + str(message_id), change)
+		except _Busy:
+			return False
+		return True
+
+	def release(self, chat_id, message_id, owner):
+		def change(record):
+			if not record or record.get('owner') != owner: # it timed out and someone else holds it now
+				raise _Busy()
+			return dict(record, busy=0)
+		try:
+			self._modify(chat_id, 'b' + str(message_id), change)
+		except _Busy:
+			pass
 
 	def import_image(self, chat_id, record_id, caption, command, file_id, created):
 		self._modify(chat_id, record_id, lambda _: imported_record(caption, command, file_id, created))
@@ -122,18 +153,24 @@ class DynamoStore:
 		return f'{chat_id}:{message_id}'
 
 	def get(self, chat_id, message_id):
-		item = self.table.get_item(Key={'id': self._id(chat_id, message_id)}).get('Item')
+		item = self.table.get_item(Key={'id': self._id(chat_id, message_id)}, ConsistentRead=True).get('Item') # see the last press's change
 		if not item or int(item.get('ttl', 0)) < time.time(): # an expired item (a deleted record is one) may linger until DynamoDB removes it
 			return None
-		return {'prompt': item['prompt'], 'command': item['command'], 'current': item['current'], 'images': item['images']}
+		record = {'prompt': item['prompt'], 'command': item['command'], 'current': item['current'], 'images': item['images']}
+		for extra in ('previous', 'source'):
+			if item.get(extra):
+				record[extra] = item[extra]
+		return record
 
-	def save_image(self, chat_id, message_id, prompt, command, style, file_id, caption, base=None, kind=None):
+	def save_image(self, chat_id, message_id, prompt, command, style, file_id, caption, base=None, kind=None, source=None):
 		from botocore.exceptions import ClientError
 		id = self._id(chat_id, message_id)
 		expires = int(time.time()) + self.days * 86400 # DynamoDB TTL deletes the item after this
 		item = {'id': id, 'prompt': prompt, 'command': command, 'current': key(style), 'images': {}, 'ttl': expires}
 		if kind:
 			item['kind'] = kind
+		if source:
+			item['source'] = source
 		try: # create the record the first time we see this message
 			self.table.put_item(Item=item,
 				ConditionExpression='attribute_not_exists(id) OR #ttl < :now', # an expired item (a deleted record) is replaced, not added to
@@ -141,14 +178,76 @@ class DynamoStore:
 		except ClientError as e:
 			if e.response['Error']['Code'] != 'ConditionalCheckFailedException':
 				raise
-		self.table.update_item(Key={'id': id},
-			UpdateExpression='SET images.#k = :image, #cur = :k, #ttl = :ttl',
-			ExpressionAttributeNames={'#k': key(style), '#cur': 'current', '#ttl': 'ttl'},
-			ExpressionAttributeValues={':image': {'file_id': file_id, 'caption': caption, 'base': base}, ':k': key(style), ':ttl': expires})
+		image = {'file_id': file_id, 'caption': caption, 'base': base}
+		for attempt in range(3):
+			# Replacing a style's image (a Remix) moves the old one to 'previous' in the same write, on condition that
+			# it is still the one we read, so nothing is lost if this fails half way or races another save.
+			item = self.table.get_item(Key={'id': id}, ProjectionExpression='images.#k', ExpressionAttributeNames={'#k': key(style)}).get('Item') or {}
+			old = (item.get('images') or {}).get(key(style))
+			names = {'#k': key(style), '#cur': 'current', '#ttl': 'ttl'}
+			values = {':image': image, ':k': key(style), ':ttl': expires}
+			update = 'SET images.#k = :image, #cur = :k, #ttl = :ttl'
+			if old:
+				condition = 'images.#k.file_id = :was'
+				values[':was'] = old.get('file_id')
+				if old.get('file_id') != file_id:
+					update += ', #prev = list_append(if_not_exists(#prev, :none), :old)'
+					names['#prev'] = 'previous'
+					values.update({':none': [], ':old': [dict(old, style=key(style))]})
+			else:
+				condition = 'attribute_not_exists(images.#k)'
+			try:
+				kept = self.table.update_item(Key={'id': id}, UpdateExpression=update, ConditionExpression=condition,
+					ExpressionAttributeNames=names, ExpressionAttributeValues=values,
+					ReturnValues='UPDATED_NEW').get('Attributes', {}).get('previous') or []
+			except ClientError as e:
+				if e.response['Error']['Code'] != 'ConditionalCheckFailedException':
+					raise
+				continue # someone else saved this style in between: read again
+			if len(kept) > MAX_PREVIOUS: # drop the oldest, so the item stays well under DynamoDB's 400 KB
+				try: # only if no other save changed the list since, or the indexes would be off
+					self.table.update_item(Key={'id': id},
+						UpdateExpression='REMOVE ' + ', '.join(f'#prev[{i}]' for i in range(len(kept) - MAX_PREVIOUS)),
+						ConditionExpression='size(#prev) = :n', ExpressionAttributeNames={'#prev': 'previous'},
+						ExpressionAttributeValues={':n': len(kept)})
+				except ClientError as e:
+					if e.response['Error']['Code'] != 'ConditionalCheckFailedException':
+						raise
+			return
+		raise RuntimeError('the image kept changing while it was being saved')
 
 	def put(self, chat_id, message_id, record):
-		self.table.put_item(Item={'id': self._id(chat_id, message_id), 'prompt': record['prompt'], 'command': record['command'],
-			'current': record['current'], 'images': record['images'], 'ttl': int(time.time()) + self.days * 86400})
+		item = {'id': self._id(chat_id, message_id), 'prompt': record['prompt'], 'command': record['command'],
+			'current': record['current'], 'images': record['images'], 'ttl': int(time.time()) + self.days * 86400}
+		for extra in ('previous', 'source'):
+			if record.get(extra):
+				item[extra] = record[extra]
+		self.table.put_item(Item=item)
+
+	def claim(self, chat_id, message_id, seconds, owner):
+		from botocore.exceptions import ClientError
+		now = int(time.time())
+		try: # a record of its own, with no images, so nothing that reads the table mistakes it for a picture
+			self.table.put_item(Item={'id': self._id(chat_id, 'b' + str(message_id)), 'prompt': '', 'command': '', 'current': '', 'images': {},
+				'busy': now + seconds, 'owner': owner, 'ttl': now + seconds + 3600},
+				ConditionExpression='attribute_not_exists(id) OR #busy < :now', ExpressionAttributeNames={'#busy': 'busy'},
+				ExpressionAttributeValues={':now': now})
+		except ClientError as e:
+			if e.response['Error']['Code'] != 'ConditionalCheckFailedException':
+				raise
+			return False
+		return True
+
+	def release(self, chat_id, message_id, owner):
+		from botocore.exceptions import ClientError
+		now = int(time.time())
+		try: # only our own claim: if ours timed out, someone else may hold it now
+			self.table.put_item(Item={'id': self._id(chat_id, 'b' + str(message_id)), 'prompt': '', 'command': '', 'current': '', 'images': {},
+				'busy': 0, 'owner': owner, 'ttl': now + 3600},
+				ConditionExpression='#owner = :owner', ExpressionAttributeNames={'#owner': 'owner'}, ExpressionAttributeValues={':owner': owner})
+		except ClientError as e:
+			if e.response['Error']['Code'] != 'ConditionalCheckFailedException':
+				raise
 
 	def import_image(self, chat_id, record_id, caption, command, file_id, created):
 		self.table.put_item(Item={'id': self._id(chat_id, record_id), 'ttl': int(time.time()) + self.days * 86400,
@@ -197,11 +296,25 @@ def _safely(operation, default, *args):
 		print(f'Store {operation} failed (continuing without history):', repr(e), file=stderr)
 		return default
 
+class _Busy(Exception):
+	pass
+
+def claim(chat_id, message_id):
+	"""Hold a message while a button press on it is handled, so a second press waits its turn. Returns a token to pass
+	to release, or None if the message is already held. If the store can't be reached it returns a token anyway: a
+	double click is better than buttons that never work."""
+	owner = uuid.uuid4().hex
+	return owner if _safely('claim', True, chat_id, message_id, BUSY_SECONDS, owner) else None
+
+def release(chat_id, message_id, owner):
+	if owner:
+		_safely('release', None, chat_id, message_id, owner)
+
 def get(chat_id, message_id):
 	return _safely('get', None, chat_id, message_id)
 
-def save_image(chat_id, message_id, prompt, command, style, file_id, caption, base=None, kind=None):
-	return _safely('save_image', None, chat_id, message_id, prompt, command, style, file_id, caption, base, kind)
+def save_image(chat_id, message_id, prompt, command, style, file_id, caption, base=None, kind=None, source=None):
+	return _safely('save_image', None, chat_id, message_id, prompt, command, style, file_id, caption, base, kind, source)
 
 def save_variations(chat_id, prompt, command, sent, captions):
 	"""Remember each photo of a variations album: sent is what sendMediaGroup returned (in album order), captions the

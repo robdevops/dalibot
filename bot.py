@@ -27,12 +27,12 @@ from sys import stderr
 from urllib.parse import urlparse
 
 import lib.worker as worker
-from lib.worker import mentions_bot
+import lib.palette as palette
 import lib.openrouter as openrouter
 import lib.store as store
 import lib.deadline as deadline
 store.check()
-from lib.styles import STYLES
+from lib.styles import STYLES, RETIRED_CUES
 if config_telegramBotToken:
 	import lib.telegram as telegram
 	botName = telegram.botName
@@ -148,7 +148,8 @@ def importForwarded(msg, chat_id, message_id):
 		return False
 	photo = msg["photo"][-1] # the largest size
 	print("[Telegram forward of our own picture]: adding it to the image history")
-	if store.import_image(chat_id, 'f' + photo["file_unique_id"], msg.get("caption", ""), config_telegramBotCommand, photo["file_id"], int(created)):
+	caption, command = worker.split_model_tag(msg.get("caption", "")) # the model's hashtag says which model made it
+	if store.import_image(chat_id, 'f' + photo["file_unique_id"], caption, command or config_telegramBotCommand, photo["file_id"], int(created)):
 		if not telegram.setMessageReaction(chat_id, message_id, "👍"): # reactions can be refused; say so in words instead
 			telegram.sendMessage(chat_id, "Saved to the image history.", message_id)
 	else:
@@ -156,7 +157,7 @@ def importForwarded(msg, chat_id, message_id):
 	return True
 
 # Telegram delivers an album as one message per picture, and only one of them carries the caption. When that
-# caption has #storeonly or #upscale, it is noted so the album's other pictures get the same treatment. They
+# caption has #storeonly, #upscale or #strict, it is noted so the album's other pictures get the same treatment. They
 # may reach us before the captioned one has been handled (each webhook call runs on its own), so they wait a
 # little for the note. With long polling messages are handled one after another, so there is nothing to wait for.
 ALBUM_WAIT = 5 # seconds
@@ -168,7 +169,7 @@ def withAlbumCaption(msg, chat_id):
 	if not album or not imageFileId(msg):
 		return msg
 	caption = msg.get("caption") or ""
-	tagged = lambda text: STORE_ONLY.search(text) or worker.UPSCALE.search(text)
+	tagged = lambda text: STORE_ONLY.search(text) or any(wants(text, botName) for wants in (worker.wants_upscale, worker.wants_strict, worker.wants_palette))
 	if caption:
 		# noted whether it is tagged or not, so the album's other pictures stop waiting as soon as it has been seen
 		store.remember_album(chat_id, album, caption)
@@ -223,7 +224,7 @@ def storeOnly(msg, chat_id, message_id, edited=False):
 		if (store.get(chat_id, record_id) or {}).get('images'): # saving would replace it, and with it every style made for it
 			telegram.sendMessage(chat_id, "That picture is already in the image history.", message_id)
 			return True
-		caption = caption or tidy(picture.get("caption") or "") # what the reply says, else the picture's own caption
+		caption = caption or tidy(worker.split_model_tag(picture.get("caption"))[0]) # what the reply says, else the picture's own caption
 	print("[Telegram #storeonly]: adding the picture to the image history")
 	if store.import_image(chat_id, record_id, caption, STORE_ONLY_COMMAND, file_id, int(picture.get("date") or time.time())):
 		if not telegram.setMessageReaction(chat_id, message_id, "👍"): # reactions can be refused; say so in words instead
@@ -242,9 +243,15 @@ def mayDelete(chat_id, user_id, chat_type):
 def deletePicture(msg, chat_id, user_id, chat_type, message_id):
 	"""A reply of #delete to a picture removes that picture's record from the image history, with every style made
 	for it, so a gallery no longer shows it. The messages in the chat are left alone. Returns True if msg was such a reply."""
-	target = msg.get("reply_to_message")
-	if not target or not imageFileId(target) or not DELETE.search(msg.get("text") or msg.get("caption") or ""):
+	text = msg.get("text") or msg.get("caption") or ""
+	slash = worker.is_command(text, DELETE_COMMAND, botName) # /delete, which needs no @botname in a group
+	if not slash and not DELETE.search(text):
 		return False
+	target = msg.get("reply_to_message")
+	if not target or not imageFileId(target):
+		if slash:
+			telegram.sendMessage(chat_id, "To delete a picture from the image history, reply to it with /delete.", message_id)
+		return slash
 	if not mayDelete(chat_id, user_id, chat_type):
 		print(user_id, "is not allowed to delete pictures. Ignoring.", file=stderr)
 		telegram.sendMessage(chat_id, "Sorry, only the bot's approved users and this group's admins can delete pictures.", message_id)
@@ -275,6 +282,7 @@ def deletePicture(msg, chat_id, user_id, chat_type, message_id):
 def parseTelegram(inbound):
 	"""Extract what the worker needs from a Telegram update. Returns None if it should be ignored."""
 	file_id = False
+	source_style = None # the style of a picture being replied to, for filing the result
 	user = userRealName = ''
 	if "callback_query" in inbound:
 		return parseTelegramCallback(inbound["callback_query"])
@@ -317,14 +325,24 @@ def parseTelegram(inbound):
 		if command in CREDITS_COMMANDS and (addressed or chat_type == "private"):
 			replyCredits(chat_id, user_id, message_id)
 			return
-		# Tagging the bot (or sending a bare command) in reply to a picture asks for variations of that picture.
-		# A command with a prompt, like "/dream a red fox", stays a text prompt even when it is a reply.
-		replied_image = imageFileId(msg.get("reply_to_message") or {})
-		if replied_image and addressed and (not prompt or mentions_bot(message, botName)):
+		# A reply to a picture works on that picture: variations, with whatever else the reply says as the note, or
+		# one faithful change with #strict, or a redraw at full size with #upscale. A command chooses the model.
+		# In a group the reply must tag the bot or start with a command, so that people can still talk about a
+		# picture without paying for images; in a private chat every reply is for the bot.
+		replied = msg.get("reply_to_message") or {}
+		replied_image = imageFileId(replied)
+		if replied_image and (addressed or chat_type == "private"):
 			file_id = replied_image
+			# the style the picture is filed under (e.g. Rubber stamp), so a #strict or #upscale of it is filed the same
+			# way. Only the record changes: what is sent to the image model stays the same.
+			source = store.get(chat_id, str(replied.get("message_id"))) or {}
+			if source.get("command") != PALETTE_COMMAND: # a palette's views ('vivid-8') are not styles to file a result under
+				source_style = (source.get("current") or "").replace(store.BASE, "") or None
+			if worker.wants_palette(message, botName):
+				message_id = str(replied.get("message_id")) # the palette replies to the picture, so its buttons can find it
 			print("[Telegram reply to a picture]:", user, message)
 	elif "photo" in msg:
-		message = msg.get("caption", '')
+		message = worker.split_model_tag(msg.get("caption", ''))[0] # a repost of one of our pictures: not part of the note
 		file_id = msg["photo"][-1]["file_id"]
 		print("[Telegram photo]:", user, message)
 		if edited and not worker.parse_command(message, botName)[2]:
@@ -332,7 +350,7 @@ def parseTelegram(inbound):
 			return
 	elif "document" in msg:
 		mime_type = msg["document"]["mime_type"]
-		message = msg.get("caption", '')
+		message = worker.split_model_tag(msg.get("caption", ''))[0]
 		if not mime_type.startswith('image/'):
 			print("[Telegram document unhandled mime_type]:", user, mime_type, message)
 			return
@@ -344,7 +362,7 @@ def parseTelegram(inbound):
 	else:
 		print("[telegram]: unhandled message without text/photo/document")
 		return
-	return chat_id, user, userRealName, message, chat_type, message_id, file_id, None, None, None
+	return chat_id, user, userRealName, message, chat_type, message_id, file_id, source_style, None, None
 
 def originalPrompt(msg):
 	"""Recover the prompt a button's image was made from. The caption shows the prompt actually used
@@ -356,16 +374,71 @@ def originalPrompt(msg):
 		if addressed and prompt:
 			return prompt
 	# the original message is gone: undo what we added to the caption
-	caption = re.sub(r"\n\nStyle: .*$", "", msg.get("caption") or "", flags=re.S) # captions from older versions
-	for label, cue in STYLES.values():
+	caption = worker.split_model_tag(msg.get("caption"))[0]
+	caption = re.sub(r"\n\nStyle: .*$", "", caption, flags=re.S) # captions from older versions
+	for cue in [cue for label, cue in STYLES.values()] + RETIRED_CUES:
 		if caption.endswith(", " + cue):
 			return caption[:-len(", " + cue)]
 	return caption
 
+def paletteButton(query, parts):
+	"""Show a palette another way (vivid or average colours; 8 or 16 of them, or Tones), in place. The palette
+	replies to the picture it was made from, which is how the picture is found again: nothing about it is saved."""
+	msg = query["message"]
+	if len(parts) != 3 or parts[1] == "-":
+		telegram.answerCallbackQuery(query["id"], "Already showing this one")
+		return
+	mode, layout = parts[1], parts[2]
+	if mode not in palette.MODES: # an option since removed (Blend), on an older palette: show Vivid
+		mode = 'vivid'
+	if layout not in telegram.PALETTE_LAYOUTS:
+		return
+	chat_type = msg["chat"]["type"]
+	if chat_type == "private" and not telegram_user_allowed(str(query["from"]["id"])):
+		telegram.answerCallbackQuery(query["id"])
+		return
+	picture = imageFileId(msg.get("reply_to_message") or {})
+	if not picture:
+		telegram.answerCallbackQuery(query["id"], "Sorry, I can't find the picture this palette was made from.", alert=True)
+		return
+	chat_id, message_id = str(msg["chat"]["id"]), str(msg["message_id"])
+	claim = store.claim(chat_id, message_id)
+	if not claim:
+		telegram.answerCallbackQuery(query["id"], "Still painting, one moment\u2026")
+		return
+	try:
+		telegram.answerCallbackQuery(query["id"])
+		keyboard = telegram.paletteKeyboard(mode, layout)
+		view = (store.get(chat_id, message_id) or {}).get("images", {}).get(f'{mode}-{layout}')
+		if view and telegram.editPhoto(chat_id, message_id, view["file_id"], view["caption"], keyboard):
+			store.set_current(chat_id, message_id, f'{mode}-{layout}') # a view made before: no need to draw it again
+			return
+		telegram.editButtons(chat_id, message_id, telegram.paletteKeyboard(*previousPalette(msg), pending=(mode, layout)))
+		grid, caption = worker.make_palette(picture, mode, layout)
+		sent = grid and telegram.editPhoto(chat_id, message_id, grid, caption, keyboard)
+		if sent:
+			worker.save_palette(chat_id, dict(sent, message_id=message_id), caption, mode, layout, picture)
+		else:
+			print("[Telegram palette]: could not redraw:", caption if not grid else "edit failed", file=stderr)
+			telegram.editButtons(chat_id, message_id, telegram.paletteKeyboard(*previousPalette(msg)))
+			if not grid:
+				telegram.sendMessage(chat_id, caption, message_id)
+	finally:
+		store.release(chat_id, message_id, claim)
+
+def previousPalette(msg):
+	"""(mode, layout) a palette message showed, read from its highlighted buttons, to show a press on the right
+	keyboard and to put it back if the press fails."""
+	selected = [b.get("text") for row in (msg.get("reply_markup") or {}).get("inline_keyboard") or [] for b in row if b.get("callback_data") == "p:-:-"]
+	mode = next((key for key, label in telegram.PALETTE_LABELS.items() if label in selected), "vivid")
+	layout = next((key for key, label in telegram.PALETTE_LAYOUTS.items() if label in selected), "8")
+	return mode, layout
+
 def parseTelegramCallback(query):
 	"""A press of a button under an image. callback_data is '<action>:<command>:<style>'.
 	Every press replaces the image in place. 'g' goes to a style: if we already made that image it is shown
-	straight away from the store (no model calls); otherwise, and for 'r' (Remix), a new one is generated."""
+	straight away from the store (no model calls); otherwise, and for 'r' (Remix), a new one is generated.
+	's' and 'u' (Retry, under a #strict or #upscale result) make it again from the same picture (and instruction)."""
 	if "message" not in query:
 		return
 	data = query.get("data", "")
@@ -375,10 +448,22 @@ def parseTelegramCallback(query):
 	if parts[0] == "n": # a button on an image that is still being made
 		telegram.answerCallbackQuery(query["id"], "Still painting, one moment\u2026")
 		return
-	if len(parts) != 3 or parts[0] not in ("g", "r") or parts[1] not in image_models or (parts[2] and parts[2] not in STYLES):
+	if parts[0] == "p": # a button under a palette
+		return paletteButton(query, parts)
+	if len(parts) != 3 or parts[0] not in ("g", "r", "s", "u") or parts[1] not in image_models:
 		return
 	action, command, style = parts
 	msg = query["message"]
+	if style and style not in STYLES: # a button of a style that has since been removed, on an older message
+		telegram.answerCallbackQuery(query["id"], "That style is no longer offered. The buttons have been updated.")
+		chat, message = str(msg["chat"]["id"]), str(msg["message_id"])
+		showing = ((store.get(chat, message) or {}).get("current") or "").replace(store.BASE, "")
+		if showing in STYLES or not showing:
+			keyboard = telegram.imageKeyboard(command, showing)
+		else: # it shows a removed style itself: highlight nothing, keep the way back to the original
+			keyboard = telegram.imageKeyboard(command, original=True)
+		telegram.editButtons(chat, message, keyboard)
+		return
 	sender = query["from"]
 	user_id = str(sender["id"])
 	chat_type = msg["chat"]["type"]
@@ -387,44 +472,74 @@ def parseTelegramCallback(query):
 		telegram.answerCallbackQuery(query["id"])
 		return
 	chat_id, message_id = str(msg["chat"]["id"]), str(msg["message_id"])
-	record = store.get(chat_id, message_id)
-	label = STYLES[style][0] if style else "original"
-	if record and action == "g":
-		if record["current"] == (style or store.BASE):
-			telegram.answerCallbackQuery(query["id"], f"Already showing the {label} image")
-			return
-		cached = record["images"].get(style or store.BASE)
-		if cached:
-			keyboard = telegram.imageKeyboard(command, style)
-			if telegram.editPhoto(chat_id, message_id, cached["file_id"], cached["caption"], keyboard):
-				telegram.answerCallbackQuery(query["id"], f"Showing the {label} image")
-				store.set_current(chat_id, message_id, style)
-				return
-			# This message can't be edited (Telegram refused). The image is saved, so post it as a new message
-			# and carry the history over, instead of paying for a new image.
-			print("[Telegram button]: could not edit the message; posting the stored image as a new message", file=stderr)
-			sent = telegram.sendPhoto(chat_id, cached["file_id"], cached["caption"], reply_markup=keyboard)
-			if sent and sent["message_id"]:
-				store.carry_over(chat_id, message_id, sent["message_id"], current=style)
-				telegram.answerCallbackQuery(query["id"], f"Posted the {label} image as a new message")
-				return
-			print("[Telegram button]: could not post the stored image either, generating a new one", file=stderr)
-	prompt = record["prompt"] if record else originalPrompt(msg)
-	if not prompt:
-		print("[Telegram button]: could not find the original prompt", file=stderr)
-		telegram.answerCallbackQuery(query["id"], "Sorry, I can't find the original prompt for this image. Please send a new prompt.", alert=True)
+	# One press at a time per message. A double click (or two people pressing) would otherwise run twice, and the
+	# second, finding the message already changed, would post a new message instead of editing this one. Every
+	# return below releases the message, except the last, which hands it to the worker to release when it's done.
+	claim = store.claim(chat_id, message_id)
+	if not claim:
+		print("[Telegram button]: this message is already being changed; ignoring the press", file=stderr)
+		telegram.answerCallbackQuery(query["id"], "Still painting, one moment\u2026")
 		return
-	telegram.answerCallbackQuery(query["id"], "Remixing..." if action == "r" else f"Painting in the style of {label}..." if style else "Generating...")
-	user = '@' + sender["username"] if "username" in sender else '@' + sender["first_name"]
-	userRealName = sender["first_name"]
-	# reply to the original prompt message if it still exists
-	reply_to = msg.get("reply_to_message", {}).get("message_id")
-	reply_to_id = str(reply_to) if reply_to else None
-	print("[Telegram button]:", user, command, style, prompt, f"(on message {message_id} in a {chat_type} chat {chat_id})")
-	# what to show while this is generated, and what to put back if it fails
-	before = (record["current"] if record else style if action == "r" else "").replace(store.BASE, "")
-	button = {'action': action, 'target': style, 'style': before}
-	return chat_id, user, userRealName, '/' + command + ' ' + prompt, chat_type, reply_to_id, False, style or None, message_id, button
+	try:
+		record = store.get(chat_id, message_id)
+		if action in ("s", "u"): # Retry: the same #strict or #upscale request again, from the picture it was made from
+			if not record or not record.get("source"):
+				store.release(chat_id, message_id, claim)
+				telegram.answerCallbackQuery(query["id"], "Sorry, I can't find the picture this was made from.", alert=True)
+				return
+			telegram.answerCallbackQuery(query["id"], "Trying again\u2026")
+			user = '@' + sender["username"] if "username" in sender else '@' + sender["first_name"]
+			reply_to = msg.get("reply_to_message", {}).get("message_id")
+			kept_style = (record.get("current") or "").replace(store.BASE, "") or None # stays filed as it was
+			print("[Telegram button]: retry", command, record["prompt"], f"(on message {message_id} in chat {chat_id})")
+			button = {'action': action, 'target': '', 'style': '', 'claim': claim}
+			tag = ' #strict ' if action == "s" else ' #upscale '
+			return (chat_id, user, sender["first_name"], '/' + command + tag + record["prompt"], chat_type,
+				str(reply_to) if reply_to else None, record["source"], kept_style, message_id, button)
+		label = STYLES[style][0] if style else "original"
+		if record and action == "g":
+			if record["current"] == (style or store.BASE):
+				store.release(chat_id, message_id, claim)
+				telegram.answerCallbackQuery(query["id"], f"Already showing the {label} image")
+				return
+			cached = record["images"].get(style or store.BASE)
+			if cached:
+				keyboard = telegram.imageKeyboard(command, style)
+				if telegram.editPhoto(chat_id, message_id, cached["file_id"], worker.tag_caption(cached["caption"], command), keyboard):
+					store.set_current(chat_id, message_id, style) # first, so the record is right even if answering fails
+					store.release(chat_id, message_id, claim)
+					telegram.answerCallbackQuery(query["id"], f"Showing the {label} image")
+					return
+				# This message can't be edited (Telegram refused). The image is saved, so post it as a new message
+				# and carry the history over, instead of paying for a new image.
+				print("[Telegram button]: could not edit the message; posting the stored image as a new message", file=stderr)
+				sent = telegram.sendPhoto(chat_id, cached["file_id"], worker.tag_caption(cached["caption"], command), reply_markup=keyboard)
+				if sent and sent["message_id"]:
+					store.carry_over(chat_id, message_id, sent["message_id"], current=style)
+					telegram.answerCallbackQuery(query["id"], f"Posted the {label} image as a new message")
+					store.release(chat_id, message_id, claim)
+					return
+				print("[Telegram button]: could not post the stored image either, generating a new one", file=stderr)
+		prompt = record["prompt"] if record else originalPrompt(msg)
+		if not prompt:
+			print("[Telegram button]: could not find the original prompt", file=stderr)
+			store.release(chat_id, message_id, claim)
+			telegram.answerCallbackQuery(query["id"], "Sorry, I can't find the original prompt for this image. Please send a new prompt.", alert=True)
+			return
+		telegram.answerCallbackQuery(query["id"], "Remixing..." if action == "r" else f"Painting in the style of {label}..." if style else "Generating...")
+		user = '@' + sender["username"] if "username" in sender else '@' + sender["first_name"]
+		userRealName = sender["first_name"]
+		# reply to the original prompt message if it still exists
+		reply_to = msg.get("reply_to_message", {}).get("message_id")
+		reply_to_id = str(reply_to) if reply_to else None
+		print("[Telegram button]:", user, command, style, prompt, f"(on message {message_id} in a {chat_type} chat {chat_id})")
+		# what to show while this is generated, and what to put back if it fails
+		before = (record["current"] if record else style if action == "r" else "").replace(store.BASE, "")
+		button = {'action': action, 'target': style, 'style': before, 'claim': claim} # the worker releases it when done
+		return chat_id, user, userRealName, '/' + command + ' ' + prompt, chat_type, reply_to_id, False, style or None, message_id, button
+	except BaseException:
+		store.release(chat_id, message_id, claim) # don't leave the message held for minutes after an error
+		raise
 
 def poll():
 	"""Telegram long polling: no web server, domain or certificate required."""

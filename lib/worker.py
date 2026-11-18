@@ -12,8 +12,9 @@ from lib.config import *
 import lib.telegram as telegram
 import lib.openrouter as openrouter
 import lib.store as store
+import lib.palette as palette
 from lib.multipart import image_type
-from lib.styles import STYLES, with_style
+from lib.styles import STYLES, VIEWPOINTS, with_style
 
 def mention_pattern(botName):
 	"""Matches @botname anywhere in a text (case-insensitive, and not as part of a longer name or an email address)."""
@@ -29,33 +30,167 @@ def without_mention(text, botName):
 	text = re.sub(r'\s+', ' ', mention_pattern(botName).sub(' ', text)).strip()
 	return re.sub(r'\s+([,.;:!?])', r'\1', text) # "a fox @bot, please" -> "a fox, please"
 
-UPSCALE = re.compile(r'(?<!\w)#upscale(?!\w)', re.IGNORECASE)
+def model_tag(command):
+	"""The hashtag the bot puts on a picture's caption to say which model made it: #gpt, #flux or #qwen, by the model
+	the command actually uses (so the default command, whatever it is called, gets its model's tag). Any other model
+	gets a tag made from its id."""
+	model = image_models.get(command, (command,))[0] or ''
+	for name, (named, _) in NAMED_MODELS.items():
+		if named == model:
+			return '#' + name
+	tag = re.sub(r'[^0-9A-Za-z_]', '', model.split('/')[-1]) # e.g. #supermodel9
+	return '#' + (tag if re.search('[A-Za-z]', tag) else 'model' + tag) # Telegram links a hashtag only if it has a letter
 
-def upscale_picture(typing, chat_id, message_id, file_id, prompt, command, model):
-	"""A picture posted with #upscale in its caption: have the image model redraw it at full size, post the result
-	and add it to the image history under the rest of the caption. The small original is not kept."""
+def model_tags():
+	"""Every tag model_tag can give, and the command it stands for (a command named after its model when there is one)."""
+	tags = {}
+	for name in list(NAMED_MODELS) + list(image_models):
+		if name in image_models:
+			tags.setdefault(model_tag(name), name)
+	return tags
+
+def tag_caption(caption, command):
+	"""caption with the model's hashtag on a line of its own at the end, kept within Telegram's caption limit."""
+	tag = model_tag(command)
+	if not caption:
+		return tag
+	room = telegram.CAPTION_MAX - len(tag) - 1
+	if len(caption) > room:
+		caption = caption[:room - 3] + '...'
+	return caption + '\n' + tag
+
+def split_model_tag(caption):
+	"""(caption without the bot's model hashtag, the command the hashtag stands for or None). Only the bot's own tags
+	are taken off, so a user's caption that ends with a hashtag of their own keeps it."""
+	caption = caption or ''
+	found = re.search(r'(?:^|\n)(#\w+)\s*$', caption) # the bot's tag is always on a line of its own
+	if found and found.group(1) in model_tags():
+		return caption[:found.start()], model_tags()[found.group(1)]
+	return caption, None
+
+UPSCALE = re.compile(r'(?<!\w)#upscale(?!\w)', re.IGNORECASE)
+STRICT = re.compile(r'(?<!\w)#(?:strict|variation)(?!\w)', re.IGNORECASE) # #variation is another name for #strict
+
+def is_command(message, name, botName=None):
+	"""Does the message start with /name (or /name@thisbot)? In a group Telegram delivers commands to the bot even
+	without admin access or a mention, so these work there with no @botname."""
+	m = re.match(r'^\s*/(\w+)(@\w+)?(?:\s|$)', message or '')
+	return bool(m and m.group(1).lower() == name and not (m.group(2) and botName and m.group(2).lower() != botName.lower()))
+
+PALETTE = re.compile(r'(?<!\w)#(?:palette|hex)(?!\w)', re.IGNORECASE)
+
+def wants_palette(message, botName=None):
+	"""Does the message ask for a picture's colours: #palette or #hex anywhere, or /palette or /hex at the start?"""
+	return any(is_command(message, name, botName) for name in PALETTE_COMMANDS) or bool(PALETTE.search(message or ''))
+
+def make_palette(file_id, mode='vivid', layout='8'):
+	"""(grid PNG, caption) of a Telegram picture's main colours, or (None, a message for the user). layout is '8' or
+	'16' colours, or 'tones' (shadows, midtones and highlights, a row each). The caption lists the hex codes to copy."""
+	image_url = telegram.getFileURL(file_id)
+	if not image_url:
+		return None, "error fetching image from Telegram"
+	try:
+		with urllib.request.urlopen(image_url, timeout=config_http_timeout) as r:
+			image_data = r.read(20 * 1024 * 1024 + 1) # Telegram lets bots download up to 20 MB
+		if layout == 'tones':
+			bands = palette.tones(image_data, mode)
+			return palette.tones_grid(bands), '\n'.join(f"{name}: {' '.join(hexes) or '-'}" for name, hexes in bands)
+		hexes = palette.colours(image_data, int(layout), mode)
+		return palette.grid(hexes), ' '.join(hexes)
+	except ModuleNotFoundError:
+		return None, "This feature requires the pillow library to be installed"
+	except Exception as e:
+		print("Palette failed:", repr(e), file=stderr)
+		return None, "Sorry, I couldn't read the colours of that picture."
+
+def palette_picture(typing, chat_id, message_id, file_id):
+	"""Reply to the picture (message_id) with a grid of its main colours, each tile labelled with its hex code, the
+	codes as text in the caption so they can be copied, and buttons to show them another way. Replying to the picture
+	itself is what lets a button find it again. Made here with Pillow, so no model is asked. Recorded with kind
+	'palette' (see save_palette)."""
 	typing.start()
-	caption = re.sub(r'\s+', ' ', UPSCALE.sub(' ', prompt)).strip() # the tag is not part of the caption
-	print("Detected a picture to upscale; downloading from telegram")
+	print("Detected a picture for its palette; downloading from telegram")
+	grid, caption = make_palette(file_id)
+	if not grid:
+		return error_to_telegram(chat_id, caption, message_id)
+	sent = telegram.sendPhoto(chat_id, grid, caption, message_id, reply_markup=telegram.paletteKeyboard())
+	if not sent:
+		return error_to_telegram(chat_id, SEND_FAILED, message_id)
+	save_palette(chat_id, sent, caption, 'vivid', '8', file_id)
+
+def save_palette(chat_id, sent, caption, mode, layout, source=None):
+	"""Record a palette view: kind 'palette' and command 'palette', so a gallery can leave palettes out. Each view
+	(mode and layout, e.g. 'vivid-8', 'average-tones') is kept under its own key, so a button can show it again
+	without redrawing it."""
+	if sent and sent.get('message_id') and sent.get('file_id'):
+		store.save_image(chat_id, sent['message_id'], caption, PALETTE_COMMAND, f'{mode}-{layout}', sent['file_id'], caption, kind='palette', source=source)
+
+def wants_upscale(message, botName=None):
+	"""Does the message ask for a picture to be redrawn at full size: #upscale anywhere, or /upscale at the start?"""
+	return is_command(message, UPSCALE_COMMAND, botName) or bool(UPSCALE.search(message or ''))
+
+def wants_strict(message, botName=None):
+	"""Does the message ask for one faithful change to a picture: #strict or #variation anywhere, or /variation at the start?"""
+	return is_command(message, STRICT_COMMAND, botName) or bool(STRICT.search(message or ''))
+
+def without_tag(tag, text):
+	return re.sub(r'\s+', ' ', tag.sub(' ', text)).strip()
+
+def redraw_picture(typing, chat_id, message_id, file_id, caption, command, what, redraw, style=None, keyboard=None, pending=None, edit_message_id=None):
+	"""Send the user's picture to the image model with redraw(image_data), post the one image that comes back with
+	caption (and keyboard, if any), and add it to the image history under caption, with the picture's file_id as its
+	source. With edit_message_id (a Retry press) the new image replaces that message's image instead.
+	The user's own picture is not kept."""
+	typing.start()
+	if pending and edit_message_id:
+		pending.start()
+	print(f"Detected a picture to {what}; downloading from telegram")
 	image_url = telegram.getFileURL(file_id)
 	if not image_url:
 		return error_to_telegram(chat_id, "error fetching image from Telegram", message_id)
 	success, cropped, image_data = prepare_image(image_url)
 	if not success:
 		return error_to_telegram(chat_id, image_data, message_id)
-	print("Uploading image to OpenRouter to be upscaled")
-	success, image = openrouter.upscale(image_data, model)
+	print(f"Uploading image to OpenRouter to {what}")
+	success, image = redraw(image_data)
 	if not success:
 		return error_to_telegram(chat_id, image or "The image model returned nothing.", message_id)
-	sent = telegram.sendPhoto(chat_id, image, caption or None, message_id)
+	sent = False
+	if edit_message_id:
+		pending.wait() # the busy buttons must land first, or they could replace the new ones
+		sent = telegram.editPhoto(chat_id, edit_message_id, image, tag_caption(caption, command), keyboard)
+		if sent:
+			sent['message_id'] = edit_message_id
+			pending.replaced = True
+		else:
+			print("In-place edit failed, posting a new image instead", file=stderr)
+	if not sent:
+		sent = telegram.sendPhoto(chat_id, image, tag_caption(caption, command), message_id, reply_markup=keyboard)
 	if not sent:
 		return error_to_telegram(chat_id, "The picture was redrawn, but sending it to Telegram failed. Please try again.", message_id)
 	if sent['message_id'] and sent['file_id']:
-		store.save_image(chat_id, sent['message_id'], caption, command, None, sent['file_id'], caption)
+		# filed under the source's style; a Retry in place keeps the image it replaces in the record's 'previous'
+		store.save_image(chat_id, sent['message_id'], caption, command, style, sent['file_id'], caption, source=file_id)
 	else:
-		print("The upscaled picture was posted but could not be added to the image history", file=stderr)
+		print(f"The picture ({what}) was posted but could not be added to the image history", file=stderr)
 	if cropped:
 		telegram.sendMessage(chat_id, "Note: I centre-cropped your non-square image before sending it to the image model", message_id)
+
+def upscale_picture(typing, chat_id, message_id, file_id, prompt, command, model, style=None, pending=None, edit_message_id=None):
+	"""A picture posted with #upscale in its caption: have the image model redraw it at full size, post the result
+	and add it to the image history under the rest of the caption. The small original is not kept."""
+	caption = without_tag(UPSCALE, prompt) # the tag is not part of the caption
+	redraw_picture(typing, chat_id, message_id, file_id, caption, command, 'upscale', lambda image: openrouter.upscale(image, model), style,
+		keyboard=telegram.retryKeyboard(command, action='u'), pending=pending, edit_message_id=edit_message_id)
+
+def strict_picture(typing, chat_id, message_id, file_id, prompt, command, model, style=None, pending=None, edit_message_id=None):
+	"""A picture posted with #strict and an instruction in its caption: one image of that picture changed as the
+	instruction says, with none of the extra styles and viewpoints that variations add."""
+	note = without_tag(STRICT, prompt)
+	if not note:
+		return error_to_telegram(chat_id, "Add what you want changed, for example: #strict make it night time", message_id)
+	redraw_picture(typing, chat_id, message_id, file_id, note, command, 'change as asked', lambda image: openrouter.strict(image, note, model), style,
+		keyboard=telegram.retryKeyboard(command), pending=pending, edit_message_id=edit_message_id)
 
 def parse_command(message, botName):
 	"""Work out which model a message asks for. Returns (command, prompt, addressed).
@@ -66,6 +201,10 @@ def parse_command(message, botName):
 	m = re.match(r'^/(\w+)(@\w+)?\s*(.*)$', text, re.S)
 	name = m.group(1).lower() if m else ''
 	name = COMMAND_ALIASES.get(name, name)
+	if name in (STRICT_COMMAND, UPSCALE_COMMAND) + PALETTE_COMMANDS and name not in image_models: # commands that work on a picture
+		if m.group(2) and botName and m.group(2).lower() != botName.lower():
+			return config_telegramBotCommand, text, False
+		return config_telegramBotCommand, without_mention(m.group(3), botName), True
 	if name in image_models or name in CREDITS_COMMANDS:
 		if m.group(2) and botName and m.group(2).lower() != botName.lower():
 			return config_telegramBotCommand, text, False # addressed to a different bot
@@ -108,8 +247,13 @@ class Pending:
 			self.thread = threading.Thread(target=self._show, daemon=True) # in parallel with generating
 			self.thread.start()
 
+	def _keyboard(self, busy):
+		if self.button['action'] in ('s', 'u'): # Retry under a #strict or #upscale result
+			return telegram.retryKeyboard(self.command, pending=busy, action=self.button['action'])
+		return telegram.imageKeyboard(self.command, self.button['style'], pending=(self.button['action'], self.button['target']) if busy else None)
+
 	def _show(self):
-		telegram.editButtons(self.chat_id, self.message_id, telegram.imageKeyboard(self.command, self.button['style'], pending=(self.button['action'], self.button['target'])))
+		telegram.editButtons(self.chat_id, self.message_id, self._keyboard(True))
 
 	def wait(self):
 		if self.thread:
@@ -118,7 +262,7 @@ class Pending:
 	def finish(self):
 		if self.thread and not self.replaced:
 			self.wait()
-			telegram.editButtons(self.chat_id, self.message_id, telegram.imageKeyboard(self.command, self.button['style']))
+			telegram.editButtons(self.chat_id, self.message_id, self._keyboard(False))
 
 def process_request(service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id=False, style=None, edit_message_id=None, button=None):
 	typing = Typing(service, chat_id)
@@ -128,14 +272,22 @@ def process_request(service, chat_id, user, message, botName, userRealName, chat
 		_process_request(typing, pending, service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id, style, edit_message_id)
 	finally:
 		typing.stop()
-		pending.finish()
+		try:
+			pending.finish()
+		finally:
+			if button and edit_message_id: # a button press: let the next press on this message through
+				store.release(chat_id, edit_message_id, button.get('claim'))
 
 def _process_request(typing, pending, service, chat_id, user, message, botName, userRealName, chat_type, message_id, file_id, style, edit_message_id):
 	now = int(time.time())
 	command, prompt, addressed = parse_command(message, botName)
 	model = image_models[command][0]
-	if file_id and UPSCALE.search(message):
-		upscale_picture(typing, chat_id, message_id, file_id, prompt, command, model)
+	if file_id and wants_palette(message, botName):
+		palette_picture(typing, chat_id, message_id, file_id)
+	elif file_id and wants_upscale(message, botName):
+		upscale_picture(typing, chat_id, message_id, file_id, prompt, command, model, style, pending, edit_message_id)
+	elif file_id and wants_strict(message, botName):
+		strict_picture(typing, chat_id, message_id, file_id, prompt, command, model, style, pending, edit_message_id)
 	elif file_id:
 		print("Detected inbound photo")
 		if addressed or chat_type == 'private':
@@ -165,7 +317,7 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 			success, image_url = result[0], result[1]
 			if success:
 				print("Sending result to Telegram")
-				captions = variation_captions(message, result[2], cropped)
+				captions = [tag_caption(caption, command) for caption in variation_captions(message, result[2], cropped)]
 				if isinstance(image_url, list):
 					sent = telegram.sendMediaGroup(chat_id, image_url, captions, message_id) # one album, so the chat isn't flooded
 				else:
@@ -189,7 +341,9 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 				error_to_telegram(chat_id, message, message_id)
 
 	else:
-		if addressed or chat_type == 'private':
+		if (addressed or chat_type == 'private') and any(wants(message, botName) for wants in (wants_strict, wants_upscale, wants_palette)) and not (style or edit_message_id):
+			error_to_telegram(chat_id, "That changes a picture: reply to one with it, or post a picture with it in the caption.", message_id)
+		elif addressed or chat_type == 'private':
 			message = prompt # the prompt as the user wrote it; it is also the caption, so buttons can regenerate from it
 			is_button = bool(style or edit_message_id)
 			if len(message.split()) >= MIN_PROMPT_WORDS or is_button:
@@ -210,8 +364,8 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 						message = openrouter.expand(message, MIN_PROMPT_WORDS)
 						print("Expanded short prompt:", message)
 					base = message
-					if style_key:
-						# a cheap text model removes words that fight the style
+					if style_key and style_key not in VIEWPOINTS:
+						# a cheap text model removes words that fight the style (a camera angle fights none)
 						base = openrouter.remix(message, STYLES[style_key][1]) or message
 				print("Sending prompt to OpenRouter:", model, style_key)
 				styled = base
@@ -228,14 +382,14 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 					if edit_message_id:
 						pending.wait() # the 'working' edit must land first, or it could overwrite the new image
 						print("Replacing message", edit_message_id, "in place;", len(image_url), "bytes" if isinstance(image_url, bytes) else "(url)")
-						sent = telegram.editPhoto(chat_id, edit_message_id, image_url, caption, keyboard)
+						sent = telegram.editPhoto(chat_id, edit_message_id, image_url, tag_caption(caption, command), keyboard)
 						if sent:
 							sent['message_id'] = edit_message_id
 							pending.replaced = True
 						else:
 							print("In-place edit failed, posting a new image instead", file=stderr)
 					if not sent and telegram.upload_timeout() >= 5: # too close to the Lambda deadline: just say it failed
-						sent = telegram.sendPhoto(chat_id, image_url, caption, message_id, reply_markup=keyboard)
+						sent = telegram.sendPhoto(chat_id, image_url, tag_caption(caption, command), message_id, reply_markup=keyboard)
 					if not sent:
 						error_to_telegram(chat_id, SEND_FAILED, message_id)
 					if sent and sent['message_id'] and sent['file_id']:

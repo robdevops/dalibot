@@ -1,12 +1,20 @@
 from lib.config import *
 from sys import stderr
 import concurrent.futures
-import urllib.request, urllib.parse, json, socket, io, time
+import urllib.request, urllib.parse, json, socket, io, time, http.client
 import lib.multipart as multipart
 import lib.deadline as deadline
 from lib.styles import STYLES
 
 UPLOAD_TIMEOUT = 60 # seconds for a request that uploads an image; a few MB can take a while to reach Telegram's servers
+
+CAPTION_MAX = 1024 # Telegram refuses a photo whose caption is longer
+
+def fit_caption(caption):
+	"""A caption Telegram accepts: long ones (a long prompt or instruction) are cut, so the paid image is still sent."""
+	if isinstance(caption, str) and len(caption) > CAPTION_MAX:
+		return caption[:CAPTION_MAX - 3] + '...'
+	return caption
 
 def redact(text):
 	"""Text for the logs, without the bot token (it is part of every Bot API URL) or the webhook secret."""
@@ -130,7 +138,7 @@ def answerCallbackQuery(callback_query_id, text=None, alert=False):
 	req = urllib.request.Request(url, json.dumps(data).encode('utf-8'), {'Content-type': 'application/json'}, method='POST')
 	try:
 		urllib.request.urlopen(req, timeout=config_http_timeout)
-	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
+	except (urllib.error.URLError, OSError, http.client.HTTPException) as e: # incl. a dropped connection, which urllib doesn't wrap
 		print("Failure executing request:", redact(url), str(e), file=stderr)
 		return False
 
@@ -144,13 +152,14 @@ def sendChatAction(chat_id, action='typing'):
 	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout):
 		pass # purely cosmetic
 
-def imageKeyboard(command, style='', pending=None):
+def imageKeyboard(command, style='', pending=None, original=False):
 	"""Buttons under an image. callback_data is '<action>:<command>:<style>'.
 	'g' goes to that style: the image we already made for it if there is one, otherwise a new one.
 	'r' (Remix) always makes a new image in the current style. Both replace the image in place.
 	The style being shown gets Telegram's native blue 'primary' button style.
 	pending=(action, style) shows the keyboard while that button's image is being made: it gets an hourglass and
-	the native green 'success' style, nothing else is highlighted, and every button just says "still working"."""
+	the native green 'success' style, nothing else is highlighted, and every button just says "still working".
+	original=True adds the Original button with no style highlighted: for a message showing a style that has been removed."""
 	def button(text, style_key, selected=False, action='g'):
 		b = {'text': text, 'callback_data': f'{action}:{command}:{style_key}'}
 		if pending:
@@ -164,9 +173,39 @@ def imageKeyboard(command, style='', pending=None):
 	styles = [button(label, key, key == style) for key, (label, _) in STYLES.items()]
 	rows = [styles[i:i + 3] for i in range(0, len(styles), 3)]
 	first_row = [button('\U0001F504 Remix', style, action='r')]
-	if style or (pending and pending == ('g', '')): # a way back to the image before any style was applied
+	if style or original or (pending and pending == ('g', '')): # a way back to the image before any style was applied
 		first_row.append(button('\u21A9 Original', ''))
 	return {'inline_keyboard': [first_row] + rows}
+
+PALETTE_LABELS = {'vivid': 'Vivid', 'average': 'Average'}
+PALETTE_LAYOUTS = {'8': '8 colours', '16': '16 colours', 'tones': 'Tones'}
+
+def paletteKeyboard(mode='vivid', layout='8', pending=None):
+	"""Buttons under a palette: how each colour is shown, and the layout (8 or 16 colours, or Tones: shadows,
+	midtones and highlights). The choices showing are highlighted. callback_data is 'p:<mode>:<layout>'; a highlighted
+	button's is 'p:-:-' (nothing to do). pending=(mode, layout) shows a press being worked on: that button gets an
+	hourglass in green, and the others just say "still working"."""
+	layout = str(layout)
+	def button(text, to_mode, to_layout, selected):
+		b = {'text': text, 'callback_data': 'p:-:-' if selected else f'p:{to_mode}:{to_layout}'}
+		if pending:
+			b['callback_data'] = 'n:-:'
+			if pending == (to_mode, to_layout) and not selected:
+				b['text'], b['style'] = '\u23F3 ' + text, 'success'
+		elif selected:
+			b['style'] = 'primary'
+		return b
+	modes = [button(label, key, layout, key == mode) for key, label in PALETTE_LABELS.items()]
+	layouts = [button(label, mode, key, key == layout) for key, label in PALETTE_LAYOUTS.items()]
+	return {'inline_keyboard': [modes, layouts]}
+
+def retryKeyboard(command, pending=False, action='s'):
+	"""The Retry button under a #strict (/variation) result (action 's') or an #upscale result ('u'): make it again from
+	the same picture (and instruction), in place. pending shows it busy (an hourglass, green), like the style buttons
+	while their image is being made."""
+	if pending:
+		return {'inline_keyboard': [[{'text': '\u23F3 Retry', 'callback_data': 'n:-:', 'style': 'success'}]]}
+	return {'inline_keyboard': [[{'text': '\U0001F504 Retry', 'callback_data': f'{action}:{command}:'}]]}
 
 def editButtons(chat_id, message_id, reply_markup):
 	"""Change just the buttons under one of our photo messages, leaving the image and caption alone. Returns True on success."""
@@ -175,7 +214,7 @@ def editButtons(chat_id, message_id, reply_markup):
 	req = urllib.request.Request(url, json.dumps(fields).encode('utf-8'), {'Content-type': 'application/json'}, method='POST')
 	try:
 		urllib.request.urlopen(req, timeout=config_http_timeout)
-	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
+	except (urllib.error.URLError, OSError, http.client.HTTPException) as e: # incl. a dropped connection
 		detail = ''
 		if isinstance(e, urllib.error.HTTPError):
 			try:
@@ -191,7 +230,7 @@ def editPhoto(chat_id, message_id, photo, caption, reply_markup=None):
 	"""Replace the image, caption and buttons of one of our messages in place.
 	photo is image bytes, a URL or a Telegram file_id. Returns {'message_id', 'file_id'} on success, False on failure."""
 	url = webhooks['telegram'] + "editMessageMedia"
-	media = {'type': 'photo', 'caption': caption}
+	media = {'type': 'photo', 'caption': fit_caption(caption)}
 	photo = for_upload(photo)
 	if isinstance(photo, bytes):
 		media['media'] = 'attach://photo'
@@ -219,6 +258,11 @@ def editPhoto(chat_id, message_id, photo, caption, reply_markup=None):
 			except Exception:
 				pass
 			e.close()
+		if 'message is not modified' in detail:
+			# it already shows exactly this (say a second press of the same button): that is success, not a reason
+			# to post the image again as a new message
+			print(f"Telegram editMessageMedia: message {message_id} already shows this image")
+			return {'message_id': str(message_id), 'file_id': photo if isinstance(photo, str) and not photo.startswith('http') else None}
 		print(f"Telegram editMessageMedia failed for chat {chat_id} message {message_id}:", str(e), detail, file=stderr)
 		return False
 	print("200 OK Telegram editMessageMedia", caption)
@@ -231,7 +275,7 @@ def sendPhoto(chat_id, photo_url, caption, message_id=None, reply_markup=None):
 	'disable_notification': 'true',
 	'chat_id': chat_id,
 	'photo': photo_url,
-	'caption': caption,
+	'caption': fit_caption(caption),
 	"allow_sending_without_reply": True,
 	"reply_to_message_id": message_id
 	}
@@ -300,7 +344,7 @@ def sendMediaGroup(chat_id, items, caption, message_id=None):
 		else:
 			entry['media'] = item
 		if captions[idx]:
-			entry['caption'] = captions[idx]
+			entry['caption'] = fit_caption(captions[idx])
 		media.append(entry)
 	url = webhooks['telegram'] + "sendMediaGroup"
 	fields = {'chat_id': chat_id, 'media': media, 'disable_notification': True, 'allow_sending_without_reply': True}
@@ -420,6 +464,12 @@ def setMyCommands():
 			commands.append({'command': name, 'description': 'same, using ' + description})
 	for alias, name in COMMAND_ALIASES.items():
 		commands.append({'command': alias, 'description': 'same as /' + name})
+	commands.append({'command': DELETE_COMMAND, 'description': 'reply to a picture: remove it from the image history'})
+	commands.append({'command': PALETTE_COMMANDS[0], 'description': "reply to a picture: its main colours, with hex codes"})
+	if UPSCALE_COMMAND not in image_models:
+		commands.append({'command': UPSCALE_COMMAND, 'description': 'reply to a picture: redraw it at full size'})
+	if STRICT_COMMAND not in image_models:
+		commands.append({'command': STRICT_COMMAND, 'description': 'reply to a picture: change it exactly as you say'})
 	commands.append({'command': CREDITS_COMMANDS[0], 'description': 'show what has been spent on OpenRouter: today, week, month'})
 	data = {'commands': commands}
 	data = json.dumps(data).encode('utf-8')
