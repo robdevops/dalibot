@@ -279,7 +279,7 @@ def plan(prompt):
 	req.add_header('Content-Type', 'application/json')
 	req.add_header('Authorization', 'Bearer ' + (config_openrouter_api_key or ''))
 	try:
-		with urllib.request.urlopen(req, timeout=deadline.limit(40)) as r:
+		with urllib.request.urlopen(req, timeout=deadline.limit(20)) as r: # like the other text-model calls: the image still needs its time
 			message = json.load(r)['choices'][0]['message']
 		calls = message.get('tool_calls') or []
 		if calls:
@@ -293,10 +293,20 @@ def plan(prompt):
 	if not isinstance(answer, dict) or answer.get('kind') not in ('technical', 'artistic'):
 		print("Prompt planning gave no usable answer, using the prompt unchanged:", str(answer)[:200], file=stderr)
 		return None
+	for name in ('labels', 'arrows', 'facts'): # a list, or nothing: never a string split into letters
+		if not isinstance(answer.get(name), list):
+			answer[name] = []
+	if answer['kind'] == 'technical' and not (answer['labels'] or answer['arrows'] or answer['facts']):
+		# nothing worked out: drawing it as planned would only forbid what was asked for
+		print("Prompt planning listed nothing for a technical picture, using the prompt unchanged", file=stderr)
+		return None
 	return answer
 
 def _text(value):
-	return re.sub(r'\s+', ' ', str(value or '')).strip().strip('"').strip()
+	text = re.sub(r'\s+', ' ', str(value or '')).strip()
+	if len(text) > 1 and text[0] == text[-1] == '"': # quoted as a whole: the quotes aren't part of it
+		text = text[1:-1].strip()
+	return text.replace('"', "'") # the prompt puts labels in double quotes, so one inside can't end one early
 
 def technical_prompt(prompt, planned):
 	"""The prompt the image model sees for a technical picture: correctness ahead of decoration, the facts as must-haves,
@@ -317,7 +327,8 @@ def technical_prompt(prompt, planned):
 			"short and legible. Add no other words, and no numbers, values or measurements that are not listed.")
 	else:
 		lines.append("Text rules: add no words, labels, numbers, values or measurements.")
-	lines.append("Draw only the arrows listed, each pointing exactly as described." if arrows else "Draw no arrows.")
+	if arrows:
+		lines.append("Draw only the arrows listed, each pointing exactly as described.")
 	return '\n'.join(lines)
 
 def _ask(system, user, max_tokens, temperature):

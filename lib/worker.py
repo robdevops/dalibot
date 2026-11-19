@@ -376,9 +376,12 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 						planned = openrouter.plan(message)
 						print("Prompt kind:", (planned or {}).get('kind', 'unknown (used unchanged)'))
 						if planned and planned['kind'] == 'technical':
-							base = openrouter.technical_prompt(message, planned)
-							technical = True
-							print("Technical prompt:", base)
+							try:
+								base = openrouter.technical_prompt(message, planned)
+								technical = True
+								print("Technical prompt:", base)
+							except Exception as e: # an answer shaped wrongly: draw the prompt as it was
+								print("Building the technical prompt failed, using the prompt unchanged:", repr(e), file=stderr)
 					if style_key and style_key not in VIEWPOINTS and not technical:
 						# a cheap text model removes words that fight the style (a camera angle fights none)
 						base = openrouter.remix(message, STYLES[style_key][1]) or message
