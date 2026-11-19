@@ -68,6 +68,24 @@ def split_model_tag(caption):
 		return caption[:found.start()], model_tags()[found.group(1)]
 	return caption, None
 
+# A basic request for an explanatory picture ("a cutaway of a jet engine") is fleshed out by the text model: which parts
+# to show and label, how they connect, and the layout, so it comes out as a clear infographic rather than a decorative
+# picture. A prompt that already says that much is left alone, as is anything else.
+INFOGRAPHIC = re.compile(r"(?i)\b(infographics?|diagrams?|diagram(med|ming)|cut-?aways?|cross-?sections?|schematics?|"
+	r"exploded\s+views?|labell?ed|how\s+(it|they|this|that)\s+works?|how-it-works|educational|explainers?)\b")
+INFOGRAPHIC_BASIC_WORDS = 15 # a prompt shorter than this is too basic to explain much by itself
+INFOGRAPHIC_TEXT_RULE = "Labels: few, short, spelled correctly, each next to what it names; no invented numbers or placeholder text."
+
+def infographic_brief(prompt):
+	"""What to add to a basic request for a diagram, cutaway, schematic, infographic or the like, else ''.
+	Text model's brief and a one-line text rule; just the rule if the text model gives nothing usable."""
+	prompt = prompt or ''
+	if not INFOGRAPHIC.search(prompt) or len(prompt.split()) >= INFOGRAPHIC_BASIC_WORDS:
+		return ''
+	brief = openrouter.infographic(prompt)
+	print("Infographic brief:", brief or '(none, rule only)')
+	return (brief + '\n\n' if brief else '') + INFOGRAPHIC_TEXT_RULE
+
 UPSCALE = re.compile(r'(?<!\w)#upscale(?!\w)', re.IGNORECASE)
 STRICT = re.compile(r'(?<!\w)#(?:strict|variation)(?!\w)', re.IGNORECASE) # #variation is another name for #strict
 
@@ -372,7 +390,9 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 				if style_key: # then we append a short style phrase
 					styled = with_style(base, style_key, fix=openrouter.fix_style)
 					print("Styled prompt:", styled)
-				success, image_url = openrouter.generate(styled, model)
+				extra = infographic_brief(prompt) # judged on the request as the user wrote it
+				# the caption shows the prompt (and style) without the brief
+				success, image_url = openrouter.generate(styled + ('\n\n' + extra if extra else ''), model)
 				if success:
 					print("Sending result to Telegram")
 					caption = styled # show the prompt that was actually used
