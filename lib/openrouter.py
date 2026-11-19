@@ -244,28 +244,6 @@ def upscale(image_bytes, model=None):
 	data_url = 'data:image/png;base64,' + base64.b64encode(image_bytes).decode()
 	return _request({'prompt': UPSCALE_PROMPT, 'input_references': [{'type': 'image_url', 'image_url': {'url': data_url}}]}, model)
 
-INFOGRAPHIC_INSTRUCTIONS = (
-	"The user asked an image model for an explanatory picture (a diagram, cutaway, cross-section, schematic or infographic), "
-	"but the request is basic. Write a short brief to add to it, as an expert would: the main parts to show and label "
-	"(at most 8, by their correct names), how they are arranged or connect, which way anything flows, and the layout "
-	"(a title, labels with thin leader lines, arrows). Only facts you are sure of; no numbers unless you are certain. "
-	"Don't change the subject or any style the user asked for. Reply with only the brief, under 70 words, no preamble."
-)
-INFOGRAPHIC_MAX_WORDS = 90
-
-def infographic(prompt):
-	"""A short brief that fleshes out a basic request for an explanatory picture, or '' if the text model fails."""
-	try:
-		text = _ask(INFOGRAPHIC_INSTRUCTIONS, prompt, 160, 0.2).strip().strip('"').strip()
-	except Exception as e:
-		print("Infographic brief failed:", repr(e), file=stderr)
-		return ''
-	text = re.sub(r'(?is)^(sure|here|brief)[^:\n]{0,60}:\s*', '', text).strip() # a preamble despite being told
-	if not 8 <= len(text.split()) <= INFOGRAPHIC_MAX_WORDS or re.search(r"(?i)\b(I can't|I cannot|I'm sorry|as an AI)\b", text):
-		print("Infographic brief unusable:", repr(text), file=stderr)
-		return ''
-	return text
-
 def _ask(system, user, max_tokens, temperature):
 	"""One call to the cheap text model. Returns its reply, or raises."""
 	body = {'model': config_openrouter_text_model, 'messages': [{'role': 'system', 'content': system}, {'role': 'user', 'content': user}],

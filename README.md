@@ -3,7 +3,6 @@ Telegram chat bot for AI image generation, powered by [OpenRouter](https://openr
 
 # Description
 * Responds to a text prompt with an image
-  * A basic request (under 15 words) for a diagram, cutaway, cross-section, schematic, infographic, or a labelled, how-it-works or educational picture is fleshed out by a cheap text model with a short brief: the main parts to show and label, how they connect and the layout. The caption still shows your prompt. A more detailed prompt is sent as written.
 * Responds to an image with four clearly different variations (each redrawn in its own style and shown from its own viewpoint, both invented by a cheap text model), sent as one album, each picture captioned with its own style and viewpoint. Add a caption to steer them.
 
 ![Screenshot of chat with Dalibot](doc/dali_1.png?raw=true "close up portrait of a girl in the style of Claude Monet")
