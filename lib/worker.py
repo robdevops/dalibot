@@ -363,6 +363,7 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 				technical = False
 				aspect = None # a technical picture's planned shape; others are square
 				drawing = None # a to-scale chart's spec: the bot draws it instead of the image model
+				fallback = None # the image model's prompt for it, if the chart can't be drawn
 				replan = False
 				if edit_message_id:
 					# a button on a technical picture: reuse the prompt and shape worked out for it, so every version agrees
@@ -382,19 +383,20 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 					if not is_button or replan: # a new prompt: a diagram or schematic must get its facts right before it is drawn
 						planned = openrouter.plan(message)
 						print("Prompt kind:", (planned or {}).get('kind', 'unknown (used unchanged)'))
-						if planned and planned['kind'] == 'technical' and chart.check(planned.get('chart')):
-							drawing = chart.check(planned['chart'])
-							base = chart.SAVED + json.dumps(drawing)
-							technical = True
-							print("To scale: drawing it as a chart:", base)
-						elif planned and planned['kind'] == 'technical':
-							try:
-								base = openrouter.technical_prompt(message, planned)
-								aspect = planned.get('aspect_ratio')
-								technical = True
+						if planned and planned['kind'] == 'technical':
+							try: # the image model's prompt: the picture itself, or the fallback if a chart can't be drawn
+								planned_base = openrouter.technical_prompt(message, planned)
+							except Exception as e: # an answer shaped wrongly
+								print("Building the technical prompt failed:", repr(e), file=stderr)
+								planned_base = None
+							aspect = planned.get('aspect_ratio')
+							if planned.get('chart'): # already checked: the bot draws it, exactly to scale
+								drawing, fallback = planned['chart'], planned_base
+								base, technical = chart.SAVED + json.dumps(drawing), True
+								print("To scale: drawing it as a chart:", base)
+							elif planned_base:
+								base, technical = planned_base, True
 								print("Technical prompt", aspect or '1:1', base)
-							except Exception as e: # an answer shaped wrongly: draw the prompt as it was
-								print("Building the technical prompt failed, using the prompt unchanged:", repr(e), file=stderr)
 					if style_key and style_key not in VIEWPOINTS and not technical:
 						# a cheap text model removes words that fight the style (a camera angle fights none)
 						base = openrouter.remix(message, STYLES[style_key][1]) or message
@@ -411,8 +413,13 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 					try:
 						success, image_url = True, chart.draw(drawing)
 					except Exception as e:
-						print("Drawing the chart failed:", repr(e), file=stderr)
-						success, image_url = False, "Sorry, I couldn't draw that diagram."
+						print("Drawing the chart failed:", repr(e), "- asking the image model instead" if fallback else '', file=stderr)
+						drawing = None
+						if fallback: # the planned picture, drawn by the image model
+							base = styled = fallback
+							success, image_url = openrouter.generate(styled, model, aspect)
+						else:
+							success, image_url = False, "Sorry, I couldn't draw that diagram."
 				else:
 					success, image_url = openrouter.generate(styled, model, aspect)
 				if success:
@@ -443,7 +450,8 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 							# the old message couldn't be edited, so this is a new one: bring its earlier images along
 							store.carry_over(chat_id, edit_message_id, sent['message_id'])
 						# remember the image (by Telegram file_id) so the buttons can switch back to it
-						store.save_image(chat_id, sent['message_id'], prompt, command, style_key, sent['file_id'], caption, base, aspect=aspect)
+						store.save_image(chat_id, sent['message_id'], prompt, command, style_key, sent['file_id'], caption, base, aspect=aspect,
+							kind='chart' if drawing else None) # a chart is the bot's drawing, not the model's: a gallery can tell
 					if config_archive:
 						image_bytesio = download_file(image_url)
 						filename = config_archive_dir + '/image_' + str(now) + '.' + image_type(image_url)[0]

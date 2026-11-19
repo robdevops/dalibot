@@ -3,6 +3,7 @@ from sys import stderr
 from lib.config import *
 import lib.deadline as deadline
 from lib.styles import STYLES, VIEWPOINTS
+import lib.chart as chart
 
 URL = 'https://openrouter.ai/api/v1/images'
 CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions'
@@ -271,11 +272,12 @@ PLAN_INSTRUCTIONS = (
 	"Describe every box, panel, label and arrow, with how they connect and the exact text and numbers of each, and put "
 	"every number shown among the requirements, so each one is checked. Keep each label short. Choose the "
 	"aspect_ratio that suits the layout: 1:1 unless it suits wide (16:9, 3:2, 4:3) or tall (9:16, 2:3, 3:4). "
-	"Image models can't draw to a measured scale. So when the picture's point is distances or sizes to scale, as orbits "
-	"around a centre or positions along a line from a starting point, also fill chart: the bot draws that exactly "
-	"itself, as an infographic with your title, subtitle, a table and a footnote, every value checked. Otherwise, the "
-	"image model draws it, so never ask it for a scale ruler, a numbered axis or a claim that something is to scale: "
-	"give the true numbers in labels and tables instead. "
+	"Image models can't draw to a measured scale. So when the picture's point is values to scale, such as orbits around "
+	"a centre, distances or sizes along a line from 0, or dates on a timeline (layout line, unit year, with start), "
+	"also fill chart: the bot draws that exactly itself, as an infographic with your title, subtitle, a table and a "
+	"footnote, every value checked. Otherwise the image model draws it, and can't measure: never ask it to claim that "
+	"something is drawn to scale or for a scale bar of distances; an axis, dial or scale with numbered marks is fine "
+	"only where it is the subject, with each mark placed by its number. "
 	"Call plan_picture once."
 )
 CHART_SCHEMA = {'type': 'object', 'description': 'Technical, to scale only: the picture as data, for the bot to draw exactly.',
@@ -284,13 +286,14 @@ CHART_SCHEMA = {'type': 'object', 'description': 'Technical, to scale only: the 
 		'title': {'type': 'string'}, 'subtitle': {'type': 'string', 'description': 'One line of key figures.'},
 		'unit': {'type': 'string', 'description': 'The unit of every value, e.g. AU or km.'},
 		'centre': {'type': 'string', 'description': 'What is at 0, e.g. Sun or Earth.'},
+		'start': {'type': 'number', 'description': 'line only: where the axis starts, if not 0 (e.g. 1900 for a timeline of years).'},
 		'items': {'type': 'array', 'maxItems': 24, 'items': {'type': 'object', 'required': ['name', 'value'], 'properties': {
 			'name': {'type': 'string'}, 'value': {'type': 'number', 'description': 'Its distance from the centre, in unit.'},
 			'group': {'type': 'string', 'description': 'For colour and the legend, e.g. Rocky planets.'},
 			'label': {'type': 'string', 'description': 'Optional: its label, if not its name and value.'},
 			'dashed': {'type': 'boolean', 'description': 'Optional: draw its orbit dashed (e.g. a spacecraft).'}}}},
-		'table': {'type': 'object', 'properties': {'columns': {'type': 'array', 'items': {'type': 'string'}},
-			'rows': {'type': 'array', 'items': {'type': 'array', 'items': {'type': 'string'}}},
+		'table': {'type': 'object', 'properties': {'columns': {'type': 'array', 'maxItems': chart.MAX_COLUMNS, 'items': {'type': 'string'}},
+			'rows': {'type': 'array', 'maxItems': chart.MAX_ROWS, 'items': {'type': 'array', 'items': {'type': 'string'}}},
 			'highlight': {'type': 'array', 'items': {'type': 'integer'}, 'description': 'Row numbers to highlight, from 0.'}}},
 		'footnote': {'type': 'string', 'description': 'What is and is not to scale.'}}}
 PLAN_TOOL = {'type': 'function', 'function': {'name': 'plan_picture', 'description': 'Say what kind of picture this is and, for a technical one, write its prompt and what it must get right.',
@@ -312,7 +315,8 @@ FACTS_TOOL = {'type': 'function', 'function': {'name': 'write_picture', 'descrip
 # image models favour looks over accuracy unless told otherwise (signalbot's brief and rules, with an infographic, not a
 # bare layout, as the default style)
 TECHNICAL_BRIEF = ("A picture that teaches, so it must be accurate: draw exactly what is described, and nothing that contradicts it. "
-	"Never draw a scale ruler, a numbered axis or a claim that something is to scale: give the true numbers only in labels and tables. "
+	"Never claim the picture is drawn to a measured scale and never draw a scale bar for distances: give the true numbers in labels and tables. "
+	"An axis, dial or scale with numbered marks only where the description asks for one, each mark placed exactly by its number. "
 	"Keep any style the description asks for, but never at the cost of accuracy; if it names none, make it a polished, "
 	"information-rich infographic: a clear visual hierarchy, colour-coded elements, room around each part, consistent line weights and high contrast. "
 	"Draw each thing once; things too close to tell apart at the picture's scale share one mark and one label, with an inset if they must be shown apart.")
@@ -355,7 +359,7 @@ def _tidy(answer):
 		answer['aspect_ratio'] = None
 	requirements = answer.get('requirements') if isinstance(answer.get('requirements'), list) else []
 	answer['requirements'] = [str(r).strip()[:MAX_REQUIREMENT] for r in requirements if str(r or '').strip()][:MAX_REQUIREMENTS]
-	answer['chart'] = answer.get('chart') if isinstance(answer.get('chart'), dict) else None
+	answer['chart'] = chart.check(answer.get('chart')) # None unless the bot can draw it
 	return answer
 
 # Words that make a picture technical whatever the planning model says, or when it can't be asked (signalbot's list).
