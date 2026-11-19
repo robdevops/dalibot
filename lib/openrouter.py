@@ -262,8 +262,14 @@ PLAN_INSTRUCTIONS = (
 	"title says so too); put each value next to the thing it describes, and add no quantities that were not asked for. "
 	"Image models can't measure, so for anything to scale, mark positions with numbered ticks on the axis itself and give "
 	"each position's number in its label; never ask for a separate scale bar or a measured length, which won't line up. "
-	"Then write the prompt in full: the subject, the layout and composition, the style if one was asked for, and every "
-	"box, label and arrow, with how they connect and the exact text of each. Keep labels few and short. Choose the "
+	"Take what the user states about the present (today's date, what has just happened) as fact, even if it is newer "
+	"than what you know; never contradict it. "
+	"Then write the prompt in full, as a polished, information-rich infographic unless another style was asked for: a "
+	"bold title and a subtitle, a colour-coded main visual, and supporting panels that add real information, such as a "
+	"labelled data table, callout boxes with the key figures, a legend, and a short note on what is and isn't to scale; "
+	"a confident colour palette (for example a dark background with bright accents) and a clear visual hierarchy. "
+	"Describe every box, panel, label and arrow, with how they connect and the exact text and numbers of each, and put "
+	"every number shown among the requirements, so each one is checked. Keep each label short. Choose the "
 	"aspect_ratio that suits the layout: 1:1 unless it suits wide (16:9, 3:2, 4:3) or tall (9:16, 2:3, 3:4). "
 	"Call plan_picture once."
 )
@@ -282,10 +288,11 @@ FACTS_TOOL = {'type': 'function', 'function': {'name': 'write_picture', 'descrip
 		'aspect_ratio': PLAN_TOOL['function']['parameters']['properties']['aspect_ratio'],
 		'requirements': dict(PLAN_TOOL['function']['parameters']['properties']['requirements'], minItems=1),
 	}}}}
-# image models favour looks over accuracy unless told otherwise (signalbot's brief and rules, word for word)
+# image models favour looks over accuracy unless told otherwise (signalbot's brief and rules, with an infographic, not a
+# bare layout, as the default style)
 TECHNICAL_BRIEF = ("A picture that teaches, so it must be accurate: draw exactly what is described, and nothing that contradicts it. "
-	"Keep any style the description asks for, but never at the cost of accuracy; if it names none, use a clean, uncluttered layout "
-	"with room around each part, consistent line weights and high contrast. "
+	"Keep any style the description asks for, but never at the cost of accuracy; if it names none, make it a polished, "
+	"information-rich infographic: a clear visual hierarchy, colour-coded elements, room around each part, consistent line weights and high contrast. "
 	"Draw each thing once; things too close to tell apart at the picture's scale share one mark and one label, with an inset if they must be shown apart.")
 TEXT_RULES = ("Text: only the words given above (labels, any title or caption), spelled exactly, each short, large and legible, "
 	"a label placed next to what it names with a leader line if needed, and each label exactly once. No other text, no placeholder text, no invented numbers or values. "
