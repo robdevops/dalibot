@@ -314,19 +314,34 @@ def _tidy(answer):
 	answer['requirements'] = [str(r).strip()[:MAX_REQUIREMENT] for r in requirements if str(r or '').strip()][:MAX_REQUIREMENTS]
 	return answer
 
+# Words that make a picture technical whatever the planning model says, or when it can't be asked (signalbot's list).
+TECHNICAL_WORDS = re.compile(r"(?i)\b(diagrams?|diagram(med|ming)|cut-?aways?|cross-?sections?|schematics?|infographics?|exploded\s+views?|"
+	r"blueprints?|flow\s?-?charts?|labell?ed|how\s+(it|they)\s+works?|to\s+scale)\b")
+
 def plan(prompt):
 	"""Sort a new prompt into 'technical' or 'artistic' with the planning model and, for a technical one, get its full
 	prompt, aspect ratio and requirements: {'kind', 'prompt', 'aspect_ratio', 'requirements'}. A technical answer with
 	nothing written is asked once more; it stays technical either way. Returns None if it can't tell (the prompt is then
 	used unchanged, as for an artistic one)."""
+	# a request that names a diagram is technical even if the model can't be asked: it is drawn with the accuracy
+	# brief and text rules around the user's own words, rather than as art
+	fallback = {'kind': 'technical', 'prompt': '', 'aspect_ratio': None, 'requirements': []} if TECHNICAL_WORDS.search(prompt) else None
 	try:
 		answer = _tool_call(PLAN_INSTRUCTIONS, prompt, PLAN_TOOL)
 	except Exception as e:
-		print("Prompt planning failed, using the prompt unchanged:", repr(e), file=stderr)
-		return None
+		detail = ''
+		if isinstance(e, urllib.error.HTTPError):
+			try:
+				detail = e.read().decode()[:300] # OpenRouter says why, e.g. an unknown model or no tool support
+			except Exception:
+				pass
+		print(f"Prompt planning with {config_openrouter_plan_model} failed:", repr(e), detail,
+			"- drawing it as technical with the prompt as it was" if fallback else "- using the prompt unchanged", file=stderr)
+		return fallback
 	if not isinstance(answer, dict) or answer.get('kind') not in ('technical', 'artistic'):
-		print("Prompt planning gave no usable answer, using the prompt unchanged:", str(answer)[:200], file=stderr)
-		return None
+		print(f"Prompt planning with {config_openrouter_plan_model} gave no usable answer:", str(answer)[:200],
+			"- drawing it as technical with the prompt as it was" if fallback else "- using the prompt unchanged", file=stderr)
+		return fallback
 	_tidy(answer)
 	if answer['kind'] == 'technical' and not (answer['prompt'] and answer['requirements']):
 		print("Prompt planning sorted it as technical but wrote too little; asking for the prompt and requirements", file=stderr)
