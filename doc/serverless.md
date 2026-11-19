@@ -130,6 +130,11 @@ You can choose the model that decides whether a new prompt is technical (a diagr
 OPENROUTER_PLAN_MODEL=deepseek/deepseek-v4.1-flash-1017
 ```
 
+And its reasoning effort: `low` (default), `medium` or `high`, or `none` to leave it out:
+```
+OPENROUTER_PLAN_REASONING=low
+```
+
 You can set the image quality: `low`, `medium`, `high` or `auto` (unset uses the image model's default):
 ```
 OPENROUTER_IMAGE_QUALITY=medium

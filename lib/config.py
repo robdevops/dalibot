@@ -53,6 +53,7 @@ config_openrouter_text_model = _str('OPENROUTER_TEXT_MODEL', 'meta-llama/llama-3
 # model that sorts a new prompt into technical or artistic and, for technical, works out the facts and writes the whole
 # prompt: it needs to be capable, so it isn't the cheap text model (signalbot's default chat model)
 config_openrouter_plan_model = _str('OPENROUTER_PLAN_MODEL', 'deepseek/deepseek-v4.1-flash-1017')
+config_openrouter_plan_reasoning = _str('OPENROUTER_PLAN_REASONING', 'low').lower() # reasoning effort for the planning model, as signalbot sends it; 'none' to leave it out
 config_image_quality = _str('OPENROUTER_IMAGE_QUALITY', '').lower() # low, medium, high or auto; unset: the image model's default
 MIN_PROMPT_WORDS = 3 # shorter typed prompts are ignored; shorter prompts on a button press are expanded by the text model
 config_image_timeout = int(_str('DALIBOT_IMAGE_TIMEOUT', 120))

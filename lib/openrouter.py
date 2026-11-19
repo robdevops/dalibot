@@ -292,18 +292,28 @@ MAX_REQUIREMENT = 300
 
 def _tool_call(instructions, prompt, tool):
 	"""One call to the planning model that has to answer through tool. Returns the tool's arguments (a dict), or raises."""
+	# as signalbot asks it: no max_tokens (a reasoning model's thinking counts towards it, and can use it all up, leaving
+	# no answer) and no temperature, which reasoning models may refuse; a low reasoning effort instead
 	body = {'model': config_openrouter_plan_model, 'messages': [{'role': 'system', 'content': instructions}, {'role': 'user', 'content': prompt}],
-		'tools': [tool], 'tool_choice': {'type': 'function', 'function': {'name': tool['function']['name']}}, 'max_tokens': 3000, 'temperature': 0.2}
+		'tools': [tool], 'tool_choice': {'type': 'function', 'function': {'name': tool['function']['name']}}}
+	if config_openrouter_plan_reasoning not in ('', 'none'):
+		body['reasoning'] = {'effort': config_openrouter_plan_reasoning}
 	req = urllib.request.Request(CHAT_URL, data=json.dumps(body).encode(), method='POST')
 	req.add_header('Content-Type', 'application/json')
 	req.add_header('Authorization', 'Bearer ' + (config_openrouter_api_key or ''))
 	with urllib.request.urlopen(req, timeout=deadline.limit(40)) as r: # a full prompt takes a capable model a little while
-		message = json.load(r)['choices'][0]['message']
+		choice = json.load(r)['choices'][0]
+	message = choice.get('message') or {}
 	calls = message.get('tool_calls') or []
 	if calls:
 		return json.loads(calls[0]['function']['arguments'])
 	found = re.search(r'\{.*\}', message.get('content') or '', re.S) # a model that answered in text instead
-	return json.loads(found.group(0)) if found else {}
+	if found:
+		return json.loads(found.group(0))
+	# say what came back instead, so a failure can be told apart: out of tokens, a refusal, plain text
+	print(f"{config_openrouter_plan_model} called no tool: finish_reason={choice.get('finish_reason')!r},",
+		f"content={str(message.get('content'))[:200]!r}, reasoning={'yes' if message.get('reasoning') else 'no'}, refusal={message.get('refusal')!r}", file=stderr)
+	return {}
 
 def _tidy(answer):
 	"""The planned picture's fields as they can be used: a prompt string, a known aspect ratio, a list of requirements."""
