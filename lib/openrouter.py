@@ -254,6 +254,7 @@ PLAN_INSTRUCTIONS = (
 	"shows; each label, with its exact text (a few words) and the part it points to; each arrow, with where it starts, where "
 	"it ends and what it means; and everything else it must get right: angles, counts, order, and what is perpendicular to, "
 	"parallel to, above, below or inside what. Use only well-established facts, and only what the picture needs. "
+	"If the picture shows quantities (distances, sizes, times, speeds) or asks for something to scale, give each key value as a label with its number and unit, worked out from well-established facts (for example \"1 light day ≈ 25.9 billion km\"), and state the proportions that must hold as facts (for example \"the Earth–Sun distance is about 1/173 of the Earth–Voyager distance\"). "
 	"Call plan_picture once. For an artistic picture, give only the kind."
 )
 PLAN_TOOL = {'type': 'function', 'function': {'name': 'plan_picture', 'description': 'Say what kind of picture this is and, for a technical one, everything it must get right.',
@@ -276,7 +277,7 @@ FACTS_INSTRUCTIONS = (
 	"generator to draw. Work out the facts it must get right before it is drawn, as an expert checking it would: what it "
 	"shows; each label, with its exact text (a few words) and the part it points to; each arrow, with where it starts, "
 	"where it ends and what it means; and angles, counts, order, and what is perpendicular to, parallel to, above, below or "
-	"inside what. Use only well-established facts. Call list_facts once."
+	"inside what. Use only well-established facts. If the picture shows quantities (distances, sizes, times, speeds) or asks for something to scale, give each key value as a label with its number and unit, worked out from well-established facts (for example \"1 light day ≈ 25.9 billion km\"), and state the proportions that must hold as facts (for example \"the Earth–Sun distance is about 1/173 of the Earth–Voyager distance\"). Call list_facts once."
 )
 FACTS_TOOL = {'type': 'function', 'function': {'name': 'list_facts', 'description': 'Everything the technical picture must get right.',
 	'parameters': {'type': 'object', 'required': ['subject', 'labels', 'facts'], 'properties': {
@@ -354,8 +355,8 @@ def technical_prompt(prompt, planned):
 	if labels:
 		lines.append("Text rules: use only the labels listed above (" + ', '.join(f'"{text}"' for text, _ in labels) + "), spelled exactly as written, "
 			"short and legible. Add no other words, and no numbers, values or measurements that are not listed.")
-	else:
-		lines.append("Text rules: add no words, labels, numbers, values or measurements.")
+	else: # no labels were worked out, which doesn't mean the picture should have none
+		lines.append("Text rules: keep any labels short, legible and spelled correctly, and add no numbers, values or measurements that are not listed above.")
 	if arrows:
 		lines.append("Draw only the arrows listed, each pointing exactly as described.")
 	return '\n'.join(lines)
