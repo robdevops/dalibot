@@ -70,6 +70,11 @@ You can choose the cheap text model that removes conflicting words from the prom
 OPENROUTER_TEXT_MODEL=meta-llama/llama-3.1-8b-instruct
 ```
 
+You can choose the model that decides whether a new prompt is technical (a diagram, cutaway, cross-section, schematic, infographic or labelled picture) or artistic, and works out a technical picture's facts before it is drawn (defaults to `OPENROUTER_TEXT_MODEL`; a stronger model gets the facts righter):
+```
+OPENROUTER_PLAN_MODEL=meta-llama/llama-3.1-8b-instruct
+```
+
 You can customise the bot command:
 ```
 TELEGRAM_BOT_COMMAND=dream

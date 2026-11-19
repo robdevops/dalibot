@@ -244,6 +244,82 @@ def upscale(image_bytes, model=None):
 	data_url = 'data:image/png;base64,' + base64.b64encode(image_bytes).decode()
 	return _request({'prompt': UPSCALE_PROMPT, 'input_references': [{'type': 'image_url', 'image_url': {'url': data_url}}]}, model)
 
+# A technical picture (a diagram, cutaway, schematic...) has to be right, so the text model works out its facts
+# first, through a tool whose schema makes it list them. The bot then writes the prompt the image model sees.
+PLAN_INSTRUCTIONS = (
+	"You prepare requests for an AI image generator. First decide what kind of picture the user wants. "
+	"technical: a diagram, cutaway, cross-section, schematic, infographic, or a labelled, how-it-works or educational picture. "
+	"artistic: everything else, such as art, scenes, portraits, logos and memes. "
+	"For a technical picture, work out the facts before anything is drawn, as an expert checking it would: what the picture "
+	"shows; each label, with its exact text (a few words) and the part it points to; each arrow, with where it starts, where "
+	"it ends and what it means; and everything else it must get right: angles, counts, order, and what is perpendicular to, "
+	"parallel to, above, below or inside what. Use only well-established facts, and only what the picture needs. "
+	"Call plan_picture once. For an artistic picture, give only the kind."
+)
+PLAN_TOOL = {'type': 'function', 'function': {'name': 'plan_picture', 'description': 'Say what kind of picture this is and, for a technical one, everything it must get right.',
+	'parameters': {'type': 'object', 'required': ['kind'], 'properties': {
+		'kind': {'type': 'string', 'enum': ['technical', 'artistic']},
+		'subject': {'type': 'string', 'description': 'Technical only: what the picture shows, in one sentence.'},
+		'labels': {'type': 'array', 'description': 'Technical only: every label on the picture.', 'items': {'type': 'object', 'required': ['text', 'points_to'],
+			'properties': {'text': {'type': 'string', 'description': 'Exactly what the label says: a few words.'}, 'points_to': {'type': 'string', 'description': 'The part it points to.'}}}},
+		'arrows': {'type': 'array', 'description': 'Technical only: every arrow.', 'items': {'type': 'object', 'required': ['from', 'to'],
+			'properties': {'from': {'type': 'string'}, 'to': {'type': 'string'}, 'meaning': {'type': 'string', 'description': 'What it shows, e.g. the direction of blood flow.'}}}},
+		'facts': {'type': 'array', 'items': {'type': 'string'}, 'description': 'Technical only: everything else it must get right, one checkable statement each: angles, counts, order, perpendicular/parallel/inside.'},
+	}}}}
+TECHNICAL_HEADER = "Accurate technical illustration:" # starts every prompt built for a technical picture, so a saved one can be recognised
+MAX_ITEMS = 24 # per list, so a runaway answer can't bury the prompt
+
+def plan(prompt):
+	"""Sort a new prompt into 'technical' or 'artistic' with the text model and, for a technical one, get the facts it
+	must get right: {'kind', 'subject', 'labels', 'arrows', 'facts'}. Returns None if it can't tell (the prompt is then
+	used unchanged, as for an artistic one)."""
+	body = {'model': config_openrouter_plan_model, 'messages': [{'role': 'system', 'content': PLAN_INSTRUCTIONS}, {'role': 'user', 'content': prompt}],
+		'tools': [PLAN_TOOL], 'tool_choice': {'type': 'function', 'function': {'name': 'plan_picture'}}, 'max_tokens': 1200, 'temperature': 0.2}
+	req = urllib.request.Request(CHAT_URL, data=json.dumps(body).encode(), method='POST')
+	req.add_header('Content-Type', 'application/json')
+	req.add_header('Authorization', 'Bearer ' + (config_openrouter_api_key or ''))
+	try:
+		with urllib.request.urlopen(req, timeout=deadline.limit(40)) as r:
+			message = json.load(r)['choices'][0]['message']
+		calls = message.get('tool_calls') or []
+		if calls:
+			answer = json.loads(calls[0]['function']['arguments'])
+		else: # a model that answered in text instead: take the JSON out of it
+			found = re.search(r'\{.*\}', message.get('content') or '', re.S)
+			answer = json.loads(found.group(0)) if found else {}
+	except Exception as e:
+		print("Prompt planning failed, using the prompt unchanged:", repr(e), file=stderr)
+		return None
+	if not isinstance(answer, dict) or answer.get('kind') not in ('technical', 'artistic'):
+		print("Prompt planning gave no usable answer, using the prompt unchanged:", str(answer)[:200], file=stderr)
+		return None
+	return answer
+
+def _text(value):
+	return re.sub(r'\s+', ' ', str(value or '')).strip().strip('"').strip()
+
+def technical_prompt(prompt, planned):
+	"""The prompt the image model sees for a technical picture: correctness ahead of decoration, the facts as must-haves,
+	and rules for the text on it."""
+	labels = [(_text(l.get('text')), _text(l.get('points_to'))) for l in (planned.get('labels') or [])[:MAX_ITEMS] if isinstance(l, dict) and _text(l.get('text'))]
+	arrows = [(_text(a.get('from')), _text(a.get('to')), _text(a.get('meaning'))) for a in (planned.get('arrows') or [])[:MAX_ITEMS] if isinstance(a, dict) and _text(a.get('from')) and _text(a.get('to'))]
+	facts = [_text(f) for f in (planned.get('facts') or [])[:MAX_ITEMS] if _text(f)]
+	subject = _text(planned.get('subject')) or prompt
+	lines = [f"{TECHNICAL_HEADER} {subject.rstrip('.')}. (Requested: {prompt})",
+		"Correctness comes first, decoration second: clear shapes and lines, a plain background, and nothing that hides or confuses the content."]
+	if labels or arrows or facts:
+		lines.append("It must get all of these right:")
+		lines += [f'- A label reading "{text}"' + (f' that points to {target}.' if target else '.') for text, target in labels]
+		lines += [f'- An arrow from {start} to {end}' + (f', showing {meaning}.' if meaning else '.') for start, end, meaning in arrows]
+		lines += ['- ' + fact.rstrip('.') + '.' for fact in facts]
+	if labels:
+		lines.append("Text rules: use only the labels listed above (" + ', '.join(f'"{text}"' for text, _ in labels) + "), spelled exactly as written, "
+			"short and legible. Add no other words, and no numbers, values or measurements that are not listed.")
+	else:
+		lines.append("Text rules: add no words, labels, numbers, values or measurements.")
+	lines.append("Draw only the arrows listed, each pointing exactly as described." if arrows else "Draw no arrows.")
+	return '\n'.join(lines)
+
 def _ask(system, user, max_tokens, temperature):
 	"""One call to the cheap text model. Returns its reply, or raises."""
 	body = {'model': config_openrouter_text_model, 'messages': [{'role': 'system', 'content': system}, {'role': 'user', 'content': user}],

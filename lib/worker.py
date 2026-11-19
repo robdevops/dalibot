@@ -358,24 +358,45 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 					if saved:
 						base = saved
 						print("Remix: reusing the saved prompt, no text model call")
+				technical = False
+				if not base and edit_message_id:
+					# a button on a technical picture: reuse the facts worked out for it, so every version agrees
+					saved = (store.get(chat_id, edit_message_id) or {}).get('images', {}).values()
+					base = next((image.get('base') for image in saved if (image.get('base') or '').startswith(openrouter.TECHNICAL_HEADER)), None)
+					if base:
+						technical = True
+						print("Reusing the technical picture's planned prompt")
 				if not base:
 					if len(message.split()) < MIN_PROMPT_WORDS: # only reachable from a button press
 						# a button press on a very short prompt: have the text model flesh it out so it still works
 						message = openrouter.expand(message, MIN_PROMPT_WORDS)
 						print("Expanded short prompt:", message)
 					base = message
-					if style_key and style_key not in VIEWPOINTS:
+					if not is_button: # a new prompt: a diagram or schematic must get its facts right before it is drawn
+						planned = openrouter.plan(message)
+						print("Prompt kind:", (planned or {}).get('kind', 'unknown (used unchanged)'))
+						if planned and planned['kind'] == 'technical':
+							base = openrouter.technical_prompt(message, planned)
+							technical = True
+							print("Technical prompt:", base)
+					if style_key and style_key not in VIEWPOINTS and not technical:
 						# a cheap text model removes words that fight the style (a camera angle fights none)
 						base = openrouter.remix(message, STYLES[style_key][1]) or message
+				technical = technical or base.startswith(openrouter.TECHNICAL_HEADER) # e.g. a Remix that reused it
 				print("Sending prompt to OpenRouter:", model, style_key)
 				styled = base
-				if style_key: # then we append a short style phrase
+				if style_key and technical: # its own line, after the rules, so it can't read as one of them
+					styled = base + '\nStyle: ' + STYLES[style_key][1] + '.'
+				elif style_key: # then we append a short style phrase
 					styled = with_style(base, style_key, fix=openrouter.fix_style)
+				if style_key:
 					print("Styled prompt:", styled)
 				success, image_url = openrouter.generate(styled, model)
 				if success:
 					print("Sending result to Telegram")
 					caption = styled # show the prompt that was actually used
+					if technical: # not the long planned prompt: what was asked for (and the style)
+						caption = with_style(prompt, style_key) if style_key else prompt
 					keyboard = telegram.imageKeyboard(command, style_key)
 					# Button presses replace the image in place; if that fails, post a new one instead
 					sent = False
