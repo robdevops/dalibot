@@ -7,7 +7,7 @@ STYLES = {
 	'bw':          ('Black & white', 'in black & white'),
 	'cartoon':     ('Cartoon', 'as a cartoon'),
 	'comicbook':   ('Comic book', 'as a comic book illustration'),
-	'picasso':     ('Cubism', 'Picasso-inspired Cubism'), # the button was 'Picasso'; the key stays, so old images still show
+	'picasso':     ('Cubism', 'in the style of Cubism'), # no artist's name: OpenAI refuses 'Picasso'. The key stays, so old images still show
 	'cyberpunk':   ('Cyberpunk', 'as cyberpunk art'),
 	'ega':         ('EGA', 'as EGA 16-color pixel art'),
 	'lithograph':  ('Lithograph', 'as a lithograph print'),
@@ -26,7 +26,7 @@ STYLES = {
 # Phrases of styles that have been removed or renamed: the bot still takes them off an old caption when it has to
 # recover the prompt from one, so 'Pablo Picasso' is not sent back to a model that refuses it.
 RETIRED_CUES = ['in the style of Pablo Picasso', 'in the style of Salvador Dalí', 'as a hand drawn illustration', 'as a pencil sketch',
-	'as a tattoo design', 'as an oil painting', 'in the style of Cubism', 'in the style of Claude Monet', 'in the style of Vincent van Gogh', 'as a 3D render']
+	'as a tattoo design', 'as an oil painting', 'Picasso-inspired Cubism', 'in the style of Claude Monet', 'in the style of Vincent van Gogh', 'as a 3D render']
 
 # Buttons that change the camera angle, not the art style: the prompt keeps its own style words (an oil painting stays
 # an oil painting, seen from above), and variations don't use them as a style.
