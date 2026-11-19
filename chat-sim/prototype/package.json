@@ -1,0 +1,12 @@
+{
+  "name": "chat-sim-prototype",
+  "private": true,
+  "type": "module",
+  "description": "Engine-core prototype: timeline computation, notification planning, route explorer",
+  "scripts": {
+    "compile": "node compile.mjs ../example-cartridge/story.ink ../example-cartridge/story.ink.json",
+    "play": "node play.mjs ../example-cartridge/story.ink.json",
+    "explore": "node explore.mjs ../example-cartridge/story.ink.json"
+  },
+  "dependencies": { "inkjs": "^2.4.0" }
+}

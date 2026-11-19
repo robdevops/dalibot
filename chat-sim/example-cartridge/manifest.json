@@ -1,0 +1,21 @@
+{
+  "$schema": "https://example.invalid/chat-sim/manifest.schema.json",
+  "format": 1,
+  "id": "org.example.signal-fire",
+  "version": "1.0.0",
+  "title": "Signal Fire",
+  "author": "Example",
+  "story": "story.ink.json",
+  "minEngine": "1.0",
+  "theme": "theme.json",
+  "characters": {
+    "wren": { "name": "Wren", "avatar": "assets/wren.png", "notificationTitle": "Wren" }
+  },
+  "endings": {
+    "saved": { "title": "Safe Harbour" },
+    "alone": { "title": "Unseen" },
+    "dark":  { "title": "Lights Out" }
+  },
+  "timing": { "typingMsPerChar": 45, "typingMinMs": 1200, "typingMaxMs": 6000, "notifyGapMs": 60000 },
+  "assets": "assets/"
+}

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://example.invalid/chat-sim/theme.schema.json",
+  "format": 1,
+  "id": "terminal-amber",
+  "layout": "terminal",
+  "colors": {
+    "background": "#0B0A07",
+    "text": "#FFB000",
+    "textDim": "#8A6000",
+    "characterBubble": "transparent",
+    "playerBubble": "transparent",
+    "playerText": "#FFE7A3",
+    "choiceBackground": "#1A1408",
+    "choiceText": "#FFB000",
+    "choiceBorder": "#FFB000",
+    "system": "#6E5A2E"
+  },
+  "fonts": { "body": "assets/fonts/IBMPlexMono-Regular.ttf", "size": 16, "lineHeight": 1.35 },
+  "bubbles": { "radius": 0, "showAvatars": false, "prefixCharacter": "> ", "prefixPlayer": "$ " },
+  "typingIndicator": { "style": "cursor", "text": "▍" },
+  "presence": { "busy": "[ {name} is busy ]", "online": "" },
+  "animation": { "messageIn": "typewriter", "charsPerSecond": 60 },
+  "sounds": { "messageIn": "assets/sfx/blip.wav", "choice": "assets/sfx/click.wav" },
+  "statusBar": "dark"
+}
