@@ -248,7 +248,7 @@ class Pending:
 			self.thread.start()
 
 	def _keyboard(self, busy):
-		if self.button['action'] in ('s', 'u'): # Retry under a #strict or #upscale result
+		if self.button['action'] in ('s', 'u', 't'): # Retry under a #strict, #upscale or technical picture
 			return telegram.retryKeyboard(self.command, pending=busy, action=self.button['action'])
 		return telegram.imageKeyboard(self.command, self.button['style'], pending=(self.button['action'], self.button['target']) if busy else None)
 
@@ -400,7 +400,9 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 					caption = styled # show the prompt that was actually used
 					if technical: # not the long planned prompt: what was asked for (and the style)
 						caption = with_style(prompt, style_key) if style_key else prompt
-					keyboard = telegram.imageKeyboard(command, style_key)
+					# a technical picture gets just Retry ('t': the same facts, drawn again in place); style buttons would only
+					# decorate what has to be correct
+					keyboard = telegram.retryKeyboard(command, action='t') if technical else telegram.imageKeyboard(command, style_key)
 					# Button presses replace the image in place; if that fails, post a new one instead
 					sent = False
 					if edit_message_id:
