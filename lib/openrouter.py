@@ -269,37 +269,63 @@ PLAN_TOOL = {'type': 'function', 'function': {'name': 'plan_picture', 'descripti
 TECHNICAL_HEADER = "Accurate technical illustration:" # starts every prompt built for a technical picture, so a saved one can be recognised
 MAX_ITEMS = 24 # per list, so a runaway answer can't bury the prompt
 
-def plan(prompt):
-	"""Sort a new prompt into 'technical' or 'artistic' with the text model and, for a technical one, get the facts it
-	must get right: {'kind', 'subject', 'labels', 'arrows', 'facts'}. Returns None if it can't tell (the prompt is then
-	used unchanged, as for an artistic one)."""
-	body = {'model': config_openrouter_plan_model, 'messages': [{'role': 'system', 'content': PLAN_INSTRUCTIONS}, {'role': 'user', 'content': prompt}],
-		'tools': [PLAN_TOOL], 'tool_choice': {'type': 'function', 'function': {'name': 'plan_picture'}}, 'max_tokens': 1200, 'temperature': 0.2}
+# The second, narrower request when the first sorted a prompt as technical but listed nothing (small models tend to stop
+# at the kind): this tool can't be answered without at least one fact.
+FACTS_INSTRUCTIONS = (
+	"The user wants a technical picture (a diagram, cutaway, cross-section, schematic or labelled picture) for an AI image "
+	"generator to draw. Work out the facts it must get right before it is drawn, as an expert checking it would: what it "
+	"shows; each label, with its exact text (a few words) and the part it points to; each arrow, with where it starts, "
+	"where it ends and what it means; and angles, counts, order, and what is perpendicular to, parallel to, above, below or "
+	"inside what. Use only well-established facts. Call list_facts once."
+)
+FACTS_TOOL = {'type': 'function', 'function': {'name': 'list_facts', 'description': 'Everything the technical picture must get right.',
+	'parameters': {'type': 'object', 'required': ['subject', 'labels', 'facts'], 'properties': {
+		name: dict(spec, **({'minItems': 1} if name == 'facts' else {})) for name, spec in PLAN_TOOL['function']['parameters']['properties'].items() if name != 'kind'}}}}
+
+def _tool_call(instructions, prompt, tool):
+	"""One call to the planning model that has to answer through tool. Returns the tool's arguments (a dict), or raises."""
+	body = {'model': config_openrouter_plan_model, 'messages': [{'role': 'system', 'content': instructions}, {'role': 'user', 'content': prompt}],
+		'tools': [tool], 'tool_choice': {'type': 'function', 'function': {'name': tool['function']['name']}}, 'max_tokens': 1200, 'temperature': 0.2}
 	req = urllib.request.Request(CHAT_URL, data=json.dumps(body).encode(), method='POST')
 	req.add_header('Content-Type', 'application/json')
 	req.add_header('Authorization', 'Bearer ' + (config_openrouter_api_key or ''))
+	with urllib.request.urlopen(req, timeout=deadline.limit(20)) as r: # like the other text-model calls: the image still needs its time
+		message = json.load(r)['choices'][0]['message']
+	calls = message.get('tool_calls') or []
+	if calls:
+		return json.loads(calls[0]['function']['arguments'])
+	found = re.search(r'\{.*\}', message.get('content') or '', re.S) # a model that answered in text instead
+	return json.loads(found.group(0)) if found else {}
+
+def _lists(answer):
+	for name in ('labels', 'arrows', 'facts'): # a list, or nothing: never a string split into letters
+		if not isinstance(answer.get(name), list):
+			answer[name] = []
+	return answer
+
+def plan(prompt):
+	"""Sort a new prompt into 'technical' or 'artistic' with the text model and, for a technical one, get the facts it
+	must get right: {'kind', 'subject', 'labels', 'arrows', 'facts'}. A technical answer that lists nothing is asked
+	once more, just for the facts; it stays technical even if that fails too. Returns None if it can't tell (the prompt
+	is then used unchanged, as for an artistic one)."""
 	try:
-		with urllib.request.urlopen(req, timeout=deadline.limit(20)) as r: # like the other text-model calls: the image still needs its time
-			message = json.load(r)['choices'][0]['message']
-		calls = message.get('tool_calls') or []
-		if calls:
-			answer = json.loads(calls[0]['function']['arguments'])
-		else: # a model that answered in text instead: take the JSON out of it
-			found = re.search(r'\{.*\}', message.get('content') or '', re.S)
-			answer = json.loads(found.group(0)) if found else {}
+		answer = _tool_call(PLAN_INSTRUCTIONS, prompt, PLAN_TOOL)
 	except Exception as e:
 		print("Prompt planning failed, using the prompt unchanged:", repr(e), file=stderr)
 		return None
 	if not isinstance(answer, dict) or answer.get('kind') not in ('technical', 'artistic'):
 		print("Prompt planning gave no usable answer, using the prompt unchanged:", str(answer)[:200], file=stderr)
 		return None
-	for name in ('labels', 'arrows', 'facts'): # a list, or nothing: never a string split into letters
-		if not isinstance(answer.get(name), list):
-			answer[name] = []
+	_lists(answer)
 	if answer['kind'] == 'technical' and not (answer['labels'] or answer['arrows'] or answer['facts']):
-		# nothing worked out: drawing it as planned would only forbid what was asked for
-		print("Prompt planning listed nothing for a technical picture, using the prompt unchanged", file=stderr)
-		return None
+		print("Prompt planning sorted it as technical but listed nothing; asking for the facts", file=stderr)
+		try:
+			facts = _tool_call(FACTS_INSTRUCTIONS, prompt, FACTS_TOOL)
+			if isinstance(facts, dict):
+				answer.update({name: value for name, value in facts.items() if name != 'kind'})
+				_lists(answer)
+		except Exception as e:
+			print("Asking for the facts failed; drawing it as technical without them:", repr(e), file=stderr)
 	return answer
 
 def _text(value):
@@ -322,6 +348,9 @@ def technical_prompt(prompt, planned):
 		lines += [f'- A label reading "{text}"' + (f' that points to {target}.' if target else '.') for text, target in labels]
 		lines += [f'- An arrow from {start} to {end}' + (f', showing {meaning}.' if meaning else '.') for start, end, meaning in arrows]
 		lines += ['- ' + fact.rstrip('.') + '.' for fact in facts]
+	if not (labels or arrows or facts): # nothing worked out: keep it correct, but forbid nothing that was asked for
+		lines.append("Text rules: keep any labels short, legible and spelled correctly, and add no numbers, values or measurements that are not certain.")
+		return '\n'.join(lines)
 	if labels:
 		lines.append("Text rules: use only the labels listed above (" + ', '.join(f'"{text}"' for text, _ in labels) + "), spelled exactly as written, "
 			"short and legible. Add no other words, and no numbers, values or measurements that are not listed.")
