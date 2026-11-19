@@ -141,9 +141,9 @@ def filler(prompt, min_words):
 		prompt = 'An image of ' + prompt
 	return prompt
 
-def generate(prompt, model=None):
-	"""Text to image. Returns (True, image_bytes) or (False, error message)."""
-	return _request({'prompt': prompt}, model)
+def generate(prompt, model=None, aspect_ratio=None):
+	"""Text to image, square unless aspect_ratio (one of RATIOS) says otherwise. Returns (True, image_bytes) or (False, error message)."""
+	return _request({'prompt': prompt}, model, aspect_ratio)
 
 # Asking a model for "a variation" tends to return near copies. So each image is told to be redrawn in its own,
 # specific style AND shown from its own viewpoint, chosen to be as different from the others as possible. The cheap
@@ -244,53 +244,60 @@ def upscale(image_bytes, model=None):
 	data_url = 'data:image/png;base64,' + base64.b64encode(image_bytes).decode()
 	return _request({'prompt': UPSCALE_PROMPT, 'input_references': [{'type': 'image_url', 'image_url': {'url': data_url}}]}, model)
 
-# A technical picture (a diagram, cutaway, schematic...) has to be right, so the text model works out its facts
-# first, through a tool whose schema makes it list them. The bot then writes the prompt the image model sees.
+# A technical picture (a diagram, cutaway, schematic...) has to be right. As in signalbot, a capable model writes the
+# whole prompt for it (layout, every label and arrow, how they connect), picks its shape, and lists the facts it must
+# get right as requirements; the bot then wraps that in a brief that puts accuracy first, and rules for its text.
+# An artistic prompt is drawn as the user wrote it.
+RATIOS = ['1:1', '3:2', '2:3', '16:9', '9:16', '4:3', '3:4']
+MAX_REQUIREMENTS = 12
 PLAN_INSTRUCTIONS = (
-	"You prepare requests for an AI image generator. First decide what kind of picture the user wants. "
-	"technical: a diagram, cutaway, cross-section, schematic, infographic, or a labelled, how-it-works or educational picture. "
-	"artistic: everything else, such as art, scenes, portraits, logos and memes. "
-	"For a technical picture, work out the facts before anything is drawn, as an expert checking it would: what the picture "
-	"shows; each label, with its exact text (a few words) and the part it points to; each arrow, with where it starts, where "
-	"it ends and what it means; and everything else it must get right: angles, counts, order, and what is perpendicular to, "
-	"parallel to, above, below or inside what. Use only well-established facts, and only what the picture needs. "
-	"If the picture shows quantities (distances, sizes, times, speeds) or asks for something to scale, give each key value as a label with its number and unit, worked out from well-established facts (for example \"1 light day ≈ 25.9 billion km\"), and state the proportions that must hold as facts (for example \"the Earth–Sun distance is about 1/173 of the Earth–Voyager distance\"). "
-	"Call plan_picture once. For an artistic picture, give only the kind."
+	"You prepare a picture for an AI image generator, which sees only the prompt you write. Set kind to technical for a "
+	"picture that explains or teaches: a diagram, cutaway, cross-section, schematic, infographic, labelled or how-it-works "
+	"illustration; artistic for anything else, such as art, a scene, a portrait, a logo or a meme. For artistic, give only "
+	"the kind. For technical, first work out the facts yourself, as an expert would check them, then list each one the "
+	"picture must get right in requirements: what every label says and exactly what it points to, which way each arrow "
+	"points and what it means, angles, counts, order, what is perpendicular, parallel, above or inside what, and any "
+	"quantities with their numbers and units (worked out, and for something to scale, the proportions that must hold). "
+	"Then write the prompt in full: the subject, the layout and composition, the style if one was asked for, and every "
+	"box, label and arrow, with how they connect and the exact text of each. Keep labels few and short. Choose the "
+	"aspect_ratio that suits the layout: 1:1 unless it suits wide (16:9, 3:2, 4:3) or tall (9:16, 2:3, 3:4). "
+	"Call plan_picture once."
 )
-PLAN_TOOL = {'type': 'function', 'function': {'name': 'plan_picture', 'description': 'Say what kind of picture this is and, for a technical one, everything it must get right.',
+PLAN_TOOL = {'type': 'function', 'function': {'name': 'plan_picture', 'description': 'Say what kind of picture this is and, for a technical one, write its prompt and what it must get right.',
 	'parameters': {'type': 'object', 'required': ['kind'], 'properties': {
-		'kind': {'type': 'string', 'enum': ['technical', 'artistic']},
-		'subject': {'type': 'string', 'description': 'Technical only: what the picture shows, in one sentence.'},
-		'labels': {'type': 'array', 'description': 'Technical only: every label on the picture.', 'items': {'type': 'object', 'required': ['text', 'points_to'],
-			'properties': {'text': {'type': 'string', 'description': 'Exactly what the label says: a few words.'}, 'points_to': {'type': 'string', 'description': 'The part it points to.'}}}},
-		'arrows': {'type': 'array', 'description': 'Technical only: every arrow.', 'items': {'type': 'object', 'required': ['from', 'to'],
-			'properties': {'from': {'type': 'string'}, 'to': {'type': 'string'}, 'meaning': {'type': 'string', 'description': 'What it shows, e.g. the direction of blood flow.'}}}},
-		'facts': {'type': 'array', 'items': {'type': 'string'}, 'description': 'Technical only: everything else it must get right, one checkable statement each: angles, counts, order, perpendicular/parallel/inside.'},
+		'kind': {'type': 'string', 'enum': ['technical', 'artistic'], 'description': 'technical for a diagram, cutaway, infographic or other picture that explains; artistic for anything else.'},
+		'prompt': {'type': 'string', 'description': 'Technical only: the full description of the picture for the image model.'},
+		'aspect_ratio': {'type': 'string', 'enum': RATIOS, 'description': "Technical only: the picture's shape."},
+		'requirements': {'type': 'array', 'maxItems': MAX_REQUIREMENTS, 'items': {'type': 'string'}, 'description': 'Technical only: each fact the picture must get exactly right, one per item.'},
 	}}}}
-TECHNICAL_HEADER = "Accurate technical illustration:" # starts every prompt built for a technical picture, so a saved one can be recognised
-MAX_ITEMS = 24 # per list, so a runaway answer can't bury the prompt
-
-# The second, narrower request when the first sorted a prompt as technical but listed nothing (small models tend to stop
-# at the kind): this tool can't be answered without at least one fact.
-FACTS_INSTRUCTIONS = (
-	"The user wants a technical picture (a diagram, cutaway, cross-section, schematic or labelled picture) for an AI image "
-	"generator to draw. Work out the facts it must get right before it is drawn, as an expert checking it would: what it "
-	"shows; each label, with its exact text (a few words) and the part it points to; each arrow, with where it starts, "
-	"where it ends and what it means; and angles, counts, order, and what is perpendicular to, parallel to, above, below or "
-	"inside what. Use only well-established facts. If the picture shows quantities (distances, sizes, times, speeds) or asks for something to scale, give each key value as a label with its number and unit, worked out from well-established facts (for example \"1 light day ≈ 25.9 billion km\"), and state the proportions that must hold as facts (for example \"the Earth–Sun distance is about 1/173 of the Earth–Voyager distance\"). Call list_facts once."
-)
-FACTS_TOOL = {'type': 'function', 'function': {'name': 'list_facts', 'description': 'Everything the technical picture must get right.',
-	'parameters': {'type': 'object', 'required': ['subject', 'labels', 'facts'], 'properties': {
-		name: dict(spec, **({'minItems': 1} if name == 'facts' else {})) for name, spec in PLAN_TOOL['function']['parameters']['properties'].items() if name != 'kind'}}}}
+# The second, narrower request when the first sorted a prompt as technical but wrote nothing for it.
+FACTS_INSTRUCTIONS = PLAN_INSTRUCTIONS.replace("Set kind to technical for", "The user wants a technical picture:").replace("Call plan_picture once.", "Call write_picture once.")
+FACTS_TOOL = {'type': 'function', 'function': {'name': 'write_picture', 'description': 'Write the technical picture\'s prompt and what it must get right.',
+	'parameters': {'type': 'object', 'required': ['prompt', 'requirements'], 'properties': {
+		'prompt': PLAN_TOOL['function']['parameters']['properties']['prompt'],
+		'aspect_ratio': PLAN_TOOL['function']['parameters']['properties']['aspect_ratio'],
+		'requirements': dict(PLAN_TOOL['function']['parameters']['properties']['requirements'], minItems=1),
+	}}}}
+# image models favour looks over accuracy unless told otherwise (signalbot's brief and rules, word for word)
+TECHNICAL_BRIEF = ("A picture that teaches, so it must be accurate: draw exactly what is described, and nothing that contradicts it. "
+	"Keep any style the description asks for, but never at the cost of accuracy; if it names none, use a clean, uncluttered layout "
+	"with room around each part, consistent line weights and high contrast. "
+	"Draw each thing once; things too close to tell apart at the picture's scale share one mark and one label, with an inset if they must be shown apart.")
+TEXT_RULES = ("Text: only the words given above (labels, any title or caption), spelled exactly, each short, large and legible, "
+	"a label placed next to what it names with a leader line if needed, and each label exactly once. No other text, no placeholder text, no invented numbers or values. "
+	"Every arrow points exactly as described.")
+TECHNICAL_HEADER = TECHNICAL_BRIEF[:40] # every prompt built for a technical picture starts with this, so a saved one can be recognised
+MAX_PROMPT = 4000
+MAX_REQUIREMENT = 300
 
 def _tool_call(instructions, prompt, tool):
 	"""One call to the planning model that has to answer through tool. Returns the tool's arguments (a dict), or raises."""
 	body = {'model': config_openrouter_plan_model, 'messages': [{'role': 'system', 'content': instructions}, {'role': 'user', 'content': prompt}],
-		'tools': [tool], 'tool_choice': {'type': 'function', 'function': {'name': tool['function']['name']}}, 'max_tokens': 1200, 'temperature': 0.2}
+		'tools': [tool], 'tool_choice': {'type': 'function', 'function': {'name': tool['function']['name']}}, 'max_tokens': 3000, 'temperature': 0.2}
 	req = urllib.request.Request(CHAT_URL, data=json.dumps(body).encode(), method='POST')
 	req.add_header('Content-Type', 'application/json')
 	req.add_header('Authorization', 'Bearer ' + (config_openrouter_api_key or ''))
-	with urllib.request.urlopen(req, timeout=deadline.limit(20)) as r: # like the other text-model calls: the image still needs its time
+	with urllib.request.urlopen(req, timeout=deadline.limit(40)) as r: # a full prompt takes a capable model a little while
 		message = json.load(r)['choices'][0]['message']
 	calls = message.get('tool_calls') or []
 	if calls:
@@ -298,17 +305,20 @@ def _tool_call(instructions, prompt, tool):
 	found = re.search(r'\{.*\}', message.get('content') or '', re.S) # a model that answered in text instead
 	return json.loads(found.group(0)) if found else {}
 
-def _lists(answer):
-	for name in ('labels', 'arrows', 'facts'): # a list, or nothing: never a string split into letters
-		if not isinstance(answer.get(name), list):
-			answer[name] = []
+def _tidy(answer):
+	"""The planned picture's fields as they can be used: a prompt string, a known aspect ratio, a list of requirements."""
+	answer['prompt'] = str(answer.get('prompt') or '').strip()[:MAX_PROMPT]
+	if answer.get('aspect_ratio') not in RATIOS:
+		answer['aspect_ratio'] = None
+	requirements = answer.get('requirements') if isinstance(answer.get('requirements'), list) else []
+	answer['requirements'] = [str(r).strip()[:MAX_REQUIREMENT] for r in requirements if str(r or '').strip()][:MAX_REQUIREMENTS]
 	return answer
 
 def plan(prompt):
-	"""Sort a new prompt into 'technical' or 'artistic' with the text model and, for a technical one, get the facts it
-	must get right: {'kind', 'subject', 'labels', 'arrows', 'facts'}. A technical answer that lists nothing is asked
-	once more, just for the facts; it stays technical even if that fails too. Returns None if it can't tell (the prompt
-	is then used unchanged, as for an artistic one)."""
+	"""Sort a new prompt into 'technical' or 'artistic' with the planning model and, for a technical one, get its full
+	prompt, aspect ratio and requirements: {'kind', 'prompt', 'aspect_ratio', 'requirements'}. A technical answer with
+	nothing written is asked once more; it stays technical either way. Returns None if it can't tell (the prompt is then
+	used unchanged, as for an artistic one)."""
 	try:
 		answer = _tool_call(PLAN_INSTRUCTIONS, prompt, PLAN_TOOL)
 	except Exception as e:
@@ -317,48 +327,28 @@ def plan(prompt):
 	if not isinstance(answer, dict) or answer.get('kind') not in ('technical', 'artistic'):
 		print("Prompt planning gave no usable answer, using the prompt unchanged:", str(answer)[:200], file=stderr)
 		return None
-	_lists(answer)
-	if answer['kind'] == 'technical' and not (answer['labels'] or answer['arrows'] or answer['facts']):
-		print("Prompt planning sorted it as technical but listed nothing; asking for the facts", file=stderr)
+	_tidy(answer)
+	if answer['kind'] == 'technical' and not (answer['prompt'] and answer['requirements']):
+		print("Prompt planning sorted it as technical but wrote too little; asking for the prompt and requirements", file=stderr)
 		try:
-			facts = _tool_call(FACTS_INSTRUCTIONS, prompt, FACTS_TOOL)
-			if isinstance(facts, dict):
-				answer.update({name: value for name, value in facts.items() if name != 'kind'})
-				_lists(answer)
+			more = _tool_call(FACTS_INSTRUCTIONS, prompt, FACTS_TOOL)
+			if isinstance(more, dict):
+				_tidy(more)
+				answer.update({name: more[name] for name in ('prompt', 'aspect_ratio', 'requirements') if more.get(name)})
 		except Exception as e:
-			print("Asking for the facts failed; drawing it as technical without them:", repr(e), file=stderr)
+			print("Asking again failed; drawing it as technical with what there is:", repr(e), file=stderr)
 	return answer
 
-def _text(value):
-	text = re.sub(r'\s+', ' ', str(value or '')).strip()
-	if len(text) > 1 and text[0] == text[-1] == '"': # quoted as a whole: the quotes aren't part of it
-		text = text[1:-1].strip()
-	return text.replace('"', "'") # the prompt puts labels in double quotes, so one inside can't end one early
-
 def technical_prompt(prompt, planned):
-	"""The prompt the image model sees for a technical picture: correctness ahead of decoration, the facts as must-haves,
-	and rules for the text on it."""
-	labels = [(_text(l.get('text')), _text(l.get('points_to'))) for l in (planned.get('labels') or [])[:MAX_ITEMS] if isinstance(l, dict) and _text(l.get('text'))]
-	arrows = [(_text(a.get('from')), _text(a.get('to')), _text(a.get('meaning'))) for a in (planned.get('arrows') or [])[:MAX_ITEMS] if isinstance(a, dict) and _text(a.get('from')) and _text(a.get('to'))]
-	facts = [_text(f) for f in (planned.get('facts') or [])[:MAX_ITEMS] if _text(f)]
-	subject = _text(planned.get('subject')) or prompt
-	lines = [f"{TECHNICAL_HEADER} {subject.rstrip('.')}. (Requested: {prompt})",
-		"Correctness comes first, decoration second: clear shapes and lines, a plain background, and nothing that hides or confuses the content."]
-	if labels or arrows or facts:
-		lines.append("It must get all of these right:")
-		lines += [f'- A label reading "{text}"' + (f' that points to {target}.' if target else '.') for text, target in labels]
-		lines += [f'- An arrow from {start} to {end}' + (f', showing {meaning}.' if meaning else '.') for start, end, meaning in arrows]
-		lines += ['- ' + fact.rstrip('.') + '.' for fact in facts]
-	if not (labels or arrows or facts): # nothing worked out: keep it correct, but forbid nothing that was asked for
-		lines.append("Text rules: keep any labels short, legible and spelled correctly, and add no numbers, values or measurements that are not certain.")
-		return '\n'.join(lines)
-	if labels:
-		lines.append("Text rules: use only the labels listed above (" + ', '.join(f'"{text}"' for text, _ in labels) + "), spelled exactly as written, "
-			"short and legible. Add no other words, and no numbers, values or measurements that are not listed.")
-	else: # no labels were worked out, which doesn't mean the picture should have none
-		lines.append("Text rules: keep any labels short, legible and spelled correctly, and add no numbers, values or measurements that are not listed above.")
-	if arrows:
-		lines.append("Draw only the arrows listed, each pointing exactly as described.")
+	"""The prompt the image model sees for a technical picture: the brief that puts accuracy first, the planned prompt
+	(or the user's own, if none was written), the requirements as must-haves, then the rules for its text."""
+	lines = [TECHNICAL_BRIEF, '', planned.get('prompt') or prompt, '']
+	requirements = planned.get('requirements') or []
+	if requirements:
+		lines.append("It must get these exactly right:")
+		lines += ['- ' + requirement for requirement in requirements]
+		lines.append('')
+	lines.append(TEXT_RULES)
 	return '\n'.join(lines)
 
 def _ask(system, user, max_tokens, temperature):
@@ -375,10 +365,12 @@ def _ask(system, user, max_tokens, temperature):
 		e.close()
 		raise
 
-def _request(body, model=None):
-	body = dict(body, model=model or config_openrouter_image_model, aspect_ratio='1:1')
+def _request(body, model=None, aspect_ratio=None):
+	body = dict(body, model=model or config_openrouter_image_model, aspect_ratio=aspect_ratio if aspect_ratio in RATIOS else '1:1')
+	if config_image_quality:
+		body['quality'] = config_image_quality # ignored by models without a quality setting
 	if debug:
-		body['quality'] = 'low' # cheaper; ignored by models without a quality setting
+		body['quality'] = 'low' # cheaper
 	req = urllib.request.Request(URL, data=json.dumps(body).encode(), method='POST')
 	req.add_header('Content-Type', 'application/json')
 	req.add_header('Authorization', 'Bearer ' + (config_openrouter_api_key or ''))

@@ -359,12 +359,13 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 						base = saved
 						print("Remix: reusing the saved prompt, no text model call")
 				technical = False
-				if not base and edit_message_id:
-					# a button on a technical picture: reuse the facts worked out for it, so every version agrees
+				aspect = None # a technical picture's planned shape; others are square
+				if edit_message_id:
+					# a button on a technical picture: reuse the prompt and shape worked out for it, so every version agrees
 					saved = (store.get(chat_id, edit_message_id) or {}).get('images', {}).values()
-					base = next((image.get('base') for image in saved if (image.get('base') or '').startswith(openrouter.TECHNICAL_HEADER)), None)
-					if base:
-						technical = True
+					planned_image = next((image for image in saved if (image.get('base') or '').startswith(openrouter.TECHNICAL_HEADER)), None)
+					if planned_image:
+						base, aspect, technical = planned_image['base'], planned_image.get('aspect'), True
 						print("Reusing the technical picture's planned prompt")
 				if not base:
 					if len(message.split()) < MIN_PROMPT_WORDS: # only reachable from a button press
@@ -378,8 +379,9 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 						if planned and planned['kind'] == 'technical':
 							try:
 								base = openrouter.technical_prompt(message, planned)
+								aspect = planned.get('aspect_ratio')
 								technical = True
-								print("Technical prompt:", base)
+								print("Technical prompt", aspect or '1:1', base)
 							except Exception as e: # an answer shaped wrongly: draw the prompt as it was
 								print("Building the technical prompt failed, using the prompt unchanged:", repr(e), file=stderr)
 					if style_key and style_key not in VIEWPOINTS and not technical:
@@ -394,7 +396,7 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 					styled = with_style(base, style_key, fix=openrouter.fix_style)
 				if style_key:
 					print("Styled prompt:", styled)
-				success, image_url = openrouter.generate(styled, model)
+				success, image_url = openrouter.generate(styled, model, aspect)
 				if success:
 					print("Sending result to Telegram")
 					caption = styled # show the prompt that was actually used
@@ -423,7 +425,7 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 							# the old message couldn't be edited, so this is a new one: bring its earlier images along
 							store.carry_over(chat_id, edit_message_id, sent['message_id'])
 						# remember the image (by Telegram file_id) so the buttons can switch back to it
-						store.save_image(chat_id, sent['message_id'], prompt, command, style_key, sent['file_id'], caption, base)
+						store.save_image(chat_id, sent['message_id'], prompt, command, style_key, sent['file_id'], caption, base, aspect=aspect)
 					if config_archive:
 						image_bytesio = download_file(image_url)
 						filename = config_archive_dir + '/image_' + str(now) + '.' + image_type(image_url)[0]

@@ -81,14 +81,14 @@ class SqliteStore:
 		finally:
 			db.close()
 
-	def save_image(self, chat_id, message_id, prompt, command, style, file_id, caption, base=None, kind=None, source=None):
+	def save_image(self, chat_id, message_id, prompt, command, style, file_id, caption, base=None, kind=None, source=None, aspect=None):
 		def change(record):
 			record = record or dict({'prompt': prompt, 'command': command, 'images': {}}, **({'kind': kind} if kind else {}), **({'source': source} if source else {}))
 			old = record['images'].get(key(style))
 			if old and old.get('file_id') != file_id: # a Remix: keep the image it replaces
 				record['previous'] = (record.get('previous') or []) + [dict(old, style=key(style))]
 				record['previous'] = record['previous'][-MAX_PREVIOUS:]
-			record['images'][key(style)] = {'file_id': file_id, 'caption': caption, 'base': base}
+			record['images'][key(style)] = dict({'file_id': file_id, 'caption': caption, 'base': base}, **({'aspect': aspect} if aspect else {}))
 			record['current'] = key(style)
 			return record
 		self._modify(chat_id, message_id, change)
@@ -162,7 +162,7 @@ class DynamoStore:
 				record[extra] = item[extra]
 		return record
 
-	def save_image(self, chat_id, message_id, prompt, command, style, file_id, caption, base=None, kind=None, source=None):
+	def save_image(self, chat_id, message_id, prompt, command, style, file_id, caption, base=None, kind=None, source=None, aspect=None):
 		from botocore.exceptions import ClientError
 		id = self._id(chat_id, message_id)
 		expires = int(time.time()) + self.days * 86400 # DynamoDB TTL deletes the item after this
@@ -178,7 +178,7 @@ class DynamoStore:
 		except ClientError as e:
 			if e.response['Error']['Code'] != 'ConditionalCheckFailedException':
 				raise
-		image = {'file_id': file_id, 'caption': caption, 'base': base}
+		image = dict({'file_id': file_id, 'caption': caption, 'base': base}, **({'aspect': aspect} if aspect else {}))
 		for attempt in range(3):
 			# Replacing a style's image (a Remix) moves the old one to 'previous' in the same write, on condition that
 			# it is still the one we read, so nothing is lost if this fails half way or races another save.
@@ -313,8 +313,8 @@ def release(chat_id, message_id, owner):
 def get(chat_id, message_id):
 	return _safely('get', None, chat_id, message_id)
 
-def save_image(chat_id, message_id, prompt, command, style, file_id, caption, base=None, kind=None, source=None):
-	return _safely('save_image', None, chat_id, message_id, prompt, command, style, file_id, caption, base, kind, source)
+def save_image(chat_id, message_id, prompt, command, style, file_id, caption, base=None, kind=None, source=None, aspect=None):
+	return _safely('save_image', None, chat_id, message_id, prompt, command, style, file_id, caption, base, kind, source, aspect)
 
 def save_variations(chat_id, prompt, command, sent, captions):
 	"""Remember each photo of a variations album: sent is what sendMediaGroup returned (in album order), captions the
