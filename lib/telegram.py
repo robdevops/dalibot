@@ -200,8 +200,8 @@ def paletteKeyboard(mode='vivid', layout='8', pending=None):
 	return {'inline_keyboard': [modes, layouts]}
 
 def retryKeyboard(command, pending=False, action='s'):
-	"""The Retry button under a #strict (/variation) result (action 's'), an #upscale result ('u') or a technical picture
-	('t', drawn again from the same facts): make it again, in place. pending shows it busy (an hourglass, green), like the style buttons
+	"""The Retry button under a #strict (/variation) result (action 's') or an #upscale result ('u'): make it again from
+	the same picture (and instruction), in place. pending shows it busy (an hourglass, green), like the style buttons
 	while their image is being made."""
 	if pending:
 		return {'inline_keyboard': [[{'text': '\u23F3 Retry', 'callback_data': 'n:-:', 'style': 'success'}]]}

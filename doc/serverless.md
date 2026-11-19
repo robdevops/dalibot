@@ -125,21 +125,6 @@ You can choose the cheap text model that removes conflicting words from the prom
 OPENROUTER_TEXT_MODEL=meta-llama/llama-3.1-8b-instruct
 ```
 
-You can choose the model that decides whether a new prompt is technical (a diagram, cutaway, cross-section, schematic, infographic or labelled picture) or artistic and, for a technical one, works out its facts and writes the whole prompt the image model sees. It needs to be a capable model (defaults to `deepseek/deepseek-v4.1-flash-1017`):
-```
-OPENROUTER_PLAN_MODEL=deepseek/deepseek-v4.1-flash-1017
-```
-
-And its reasoning effort: `low` (default), `medium` or `high`, or `none` to leave it out:
-```
-OPENROUTER_PLAN_REASONING=low
-```
-
-You can set the image quality: `low`, `medium`, `high` or `auto` (unset uses the image model's default):
-```
-OPENROUTER_IMAGE_QUALITY=medium
-```
-
 You can customise the bot command:
 ```
 TELEGRAM_BOT_COMMAND=dream

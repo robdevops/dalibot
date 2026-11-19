@@ -438,8 +438,7 @@ def parseTelegramCallback(query):
 	"""A press of a button under an image. callback_data is '<action>:<command>:<style>'.
 	Every press replaces the image in place. 'g' goes to a style: if we already made that image it is shown
 	straight away from the store (no model calls); otherwise, and for 'r' (Remix), a new one is generated.
-	's' and 'u' (Retry, under a #strict or #upscale result) make it again from the same picture (and instruction).
-	't' (Retry, under a technical picture) draws it again from the same facts."""
+	's' and 'u' (Retry, under a #strict or #upscale result) make it again from the same picture (and instruction)."""
 	if "message" not in query:
 		return
 	data = query.get("data", "")
@@ -451,7 +450,7 @@ def parseTelegramCallback(query):
 		return
 	if parts[0] == "p": # a button under a palette
 		return paletteButton(query, parts)
-	if len(parts) != 3 or parts[0] not in ("g", "r", "s", "u", "t") or parts[1] not in image_models:
+	if len(parts) != 3 or parts[0] not in ("g", "r", "s", "u") or parts[1] not in image_models:
 		return
 	action, command, style = parts
 	msg = query["message"]
@@ -527,7 +526,7 @@ def parseTelegramCallback(query):
 			store.release(chat_id, message_id, claim)
 			telegram.answerCallbackQuery(query["id"], "Sorry, I can't find the original prompt for this image. Please send a new prompt.", alert=True)
 			return
-		telegram.answerCallbackQuery(query["id"], "Trying again\u2026" if action == "t" else "Remixing..." if action == "r" else f"Painting in the style of {label}..." if style else "Generating...")
+		telegram.answerCallbackQuery(query["id"], "Remixing..." if action == "r" else f"Painting in the style of {label}..." if style else "Generating...")
 		user = '@' + sender["username"] if "username" in sender else '@' + sender["first_name"]
 		userRealName = sender["first_name"]
 		# reply to the original prompt message if it still exists
