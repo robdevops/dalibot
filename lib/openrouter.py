@@ -141,9 +141,9 @@ def filler(prompt, min_words):
 		prompt = 'An image of ' + prompt
 	return prompt
 
-def generate(prompt, model=None):
-	"""Text to image. Returns (True, image_bytes) or (False, error message)."""
-	return _request({'prompt': prompt}, model)
+def generate(prompt, model=None, aspect_ratio=None):
+	"""Text to image, square unless aspect_ratio (one of RATIOS) says otherwise. Returns (True, image_bytes) or (False, error message)."""
+	return _request({'prompt': prompt}, model, aspect_ratio)
 
 # Asking a model for "a variation" tends to return near copies. So each image is told to be redrawn in its own,
 # specific style AND shown from its own viewpoint, chosen to be as different from the others as possible. The cheap
@@ -244,6 +244,142 @@ def upscale(image_bytes, model=None):
 	data_url = 'data:image/png;base64,' + base64.b64encode(image_bytes).decode()
 	return _request({'prompt': UPSCALE_PROMPT, 'input_references': [{'type': 'image_url', 'image_url': {'url': data_url}}]}, model)
 
+# A technical picture (a diagram, cutaway, schematic...) has to be right. As in signalbot, a capable model writes the
+# whole prompt for it (layout, every label and arrow, how they connect), picks its shape, and lists the facts it must
+# get right as requirements; the bot then wraps that in a brief that puts accuracy first, and rules for its text.
+# An artistic prompt is drawn as the user wrote it.
+RATIOS = ['1:1', '3:2', '2:3', '16:9', '9:16', '4:3', '3:4']
+MAX_REQUIREMENTS = 12
+PLAN_INSTRUCTIONS = (
+	"You prepare a picture for an AI image generator, which sees only the prompt you write. Set kind to technical for a "
+	"picture that explains or teaches: a diagram, cutaway, cross-section, schematic, infographic, labelled or how-it-works "
+	"illustration; artistic for anything else, such as art, a scene, a portrait, a logo or a meme. For artistic, give only "
+	"the kind. For technical, first work out the facts yourself, as an expert would check them, then list each one the "
+	"picture must get right in requirements: what every label says and exactly what it points to, which way each arrow "
+	"points and what it means, angles, counts, order, what is perpendicular, parallel, above or inside what, and any "
+	"quantities with their numbers and units (worked out, and for something to scale, the proportions that must hold). "
+	"Keep every quantity in one frame of reference, the one the request uses (from Earth if it says from Earth, and the "
+	"title says so too); put each value next to the thing it describes, and add no quantities that were not asked for. "
+	"Image models can't measure, so for anything to scale, mark positions with numbered ticks on the axis itself and give "
+	"each position's number in its label; never ask for a separate scale bar or a measured length, which won't line up. "
+	"Then write the prompt in full: the subject, the layout and composition, the style if one was asked for, and every "
+	"box, label and arrow, with how they connect and the exact text of each. Keep labels few and short. Choose the "
+	"aspect_ratio that suits the layout: 1:1 unless it suits wide (16:9, 3:2, 4:3) or tall (9:16, 2:3, 3:4). "
+	"Call plan_picture once."
+)
+PLAN_TOOL = {'type': 'function', 'function': {'name': 'plan_picture', 'description': 'Say what kind of picture this is and, for a technical one, write its prompt and what it must get right.',
+	'parameters': {'type': 'object', 'required': ['kind'], 'properties': {
+		'kind': {'type': 'string', 'enum': ['technical', 'artistic'], 'description': 'technical for a diagram, cutaway, infographic or other picture that explains; artistic for anything else.'},
+		'prompt': {'type': 'string', 'description': 'Technical only: the full description of the picture for the image model.'},
+		'aspect_ratio': {'type': 'string', 'enum': RATIOS, 'description': "Technical only: the picture's shape."},
+		'requirements': {'type': 'array', 'maxItems': MAX_REQUIREMENTS, 'items': {'type': 'string'}, 'description': 'Technical only: each fact the picture must get exactly right, one per item.'},
+	}}}}
+# The second, narrower request when the first sorted a prompt as technical but wrote nothing for it.
+FACTS_INSTRUCTIONS = PLAN_INSTRUCTIONS.replace("Set kind to technical for", "The user wants a technical picture:").replace("Call plan_picture once.", "Call write_picture once.")
+FACTS_TOOL = {'type': 'function', 'function': {'name': 'write_picture', 'description': 'Write the technical picture\'s prompt and what it must get right.',
+	'parameters': {'type': 'object', 'required': ['prompt', 'requirements'], 'properties': {
+		'prompt': PLAN_TOOL['function']['parameters']['properties']['prompt'],
+		'aspect_ratio': PLAN_TOOL['function']['parameters']['properties']['aspect_ratio'],
+		'requirements': dict(PLAN_TOOL['function']['parameters']['properties']['requirements'], minItems=1),
+	}}}}
+# image models favour looks over accuracy unless told otherwise (signalbot's brief and rules, word for word)
+TECHNICAL_BRIEF = ("A picture that teaches, so it must be accurate: draw exactly what is described, and nothing that contradicts it. "
+	"Keep any style the description asks for, but never at the cost of accuracy; if it names none, use a clean, uncluttered layout "
+	"with room around each part, consistent line weights and high contrast. "
+	"Draw each thing once; things too close to tell apart at the picture's scale share one mark and one label, with an inset if they must be shown apart.")
+TEXT_RULES = ("Text: only the words given above (labels, any title or caption), spelled exactly, each short, large and legible, "
+	"a label placed next to what it names with a leader line if needed, and each label exactly once. No other text, no placeholder text, no invented numbers or values. "
+	"Every arrow points exactly as described.")
+TECHNICAL_HEADER = TECHNICAL_BRIEF[:40] # every prompt built for a technical picture starts with this, so a saved one can be recognised
+MAX_PROMPT = 4000
+MAX_REQUIREMENT = 300
+
+def _tool_call(instructions, prompt, tool):
+	"""One call to the planning model that has to answer through tool. Returns the tool's arguments (a dict), or raises."""
+	# as signalbot asks it: no max_tokens (a reasoning model's thinking counts towards it, and can use it all up, leaving
+	# no answer) and no temperature, which reasoning models may refuse; a low reasoning effort instead
+	body = {'model': config_openrouter_plan_model, 'messages': [{'role': 'system', 'content': instructions}, {'role': 'user', 'content': prompt}],
+		'tools': [tool], 'tool_choice': {'type': 'function', 'function': {'name': tool['function']['name']}}}
+	if config_openrouter_plan_reasoning not in ('', 'none'):
+		body['reasoning'] = {'effort': config_openrouter_plan_reasoning}
+	req = urllib.request.Request(CHAT_URL, data=json.dumps(body).encode(), method='POST')
+	req.add_header('Content-Type', 'application/json')
+	req.add_header('Authorization', 'Bearer ' + (config_openrouter_api_key or ''))
+	with urllib.request.urlopen(req, timeout=deadline.limit(40)) as r: # a full prompt takes a capable model a little while
+		choice = json.load(r)['choices'][0]
+	message = choice.get('message') or {}
+	calls = message.get('tool_calls') or []
+	if calls:
+		return json.loads(calls[0]['function']['arguments'])
+	found = re.search(r'\{.*\}', message.get('content') or '', re.S) # a model that answered in text instead
+	if found:
+		return json.loads(found.group(0))
+	# say what came back instead, so a failure can be told apart: out of tokens, a refusal, plain text
+	print(f"{config_openrouter_plan_model} called no tool: finish_reason={choice.get('finish_reason')!r},",
+		f"content={str(message.get('content'))[:200]!r}, reasoning={'yes' if message.get('reasoning') else 'no'}, refusal={message.get('refusal')!r}", file=stderr)
+	return {}
+
+def _tidy(answer):
+	"""The planned picture's fields as they can be used: a prompt string, a known aspect ratio, a list of requirements."""
+	answer['prompt'] = str(answer.get('prompt') or '').strip()[:MAX_PROMPT]
+	if answer.get('aspect_ratio') not in RATIOS:
+		answer['aspect_ratio'] = None
+	requirements = answer.get('requirements') if isinstance(answer.get('requirements'), list) else []
+	answer['requirements'] = [str(r).strip()[:MAX_REQUIREMENT] for r in requirements if str(r or '').strip()][:MAX_REQUIREMENTS]
+	return answer
+
+# Words that make a picture technical whatever the planning model says, or when it can't be asked (signalbot's list).
+TECHNICAL_WORDS = re.compile(r"(?i)\b(diagrams?|diagram(med|ming)|cut-?aways?|cross-?sections?|schematics?|infographics?|exploded\s+views?|"
+	r"blueprints?|flow\s?-?charts?|labell?ed|how\s+(it|they)\s+works?|to\s+scale)\b")
+
+def plan(prompt):
+	"""Sort a new prompt into 'technical' or 'artistic' with the planning model and, for a technical one, get its full
+	prompt, aspect ratio and requirements: {'kind', 'prompt', 'aspect_ratio', 'requirements'}. A technical answer with
+	nothing written is asked once more; it stays technical either way. Returns None if it can't tell (the prompt is then
+	used unchanged, as for an artistic one)."""
+	# a request that names a diagram is technical even if the model can't be asked: it is drawn with the accuracy
+	# brief and text rules around the user's own words, rather than as art
+	fallback = {'kind': 'technical', 'prompt': '', 'aspect_ratio': None, 'requirements': []} if TECHNICAL_WORDS.search(prompt) else None
+	try:
+		answer = _tool_call(PLAN_INSTRUCTIONS, prompt, PLAN_TOOL)
+	except Exception as e:
+		detail = ''
+		if isinstance(e, urllib.error.HTTPError):
+			try:
+				detail = e.read().decode()[:300] # OpenRouter says why, e.g. an unknown model or no tool support
+			except Exception:
+				pass
+		print(f"Prompt planning with {config_openrouter_plan_model} failed:", repr(e), detail,
+			"- drawing it as technical with the prompt as it was" if fallback else "- using the prompt unchanged", file=stderr)
+		return fallback
+	if not isinstance(answer, dict) or answer.get('kind') not in ('technical', 'artistic'):
+		print(f"Prompt planning with {config_openrouter_plan_model} gave no usable answer:", str(answer)[:200],
+			"- drawing it as technical with the prompt as it was" if fallback else "- using the prompt unchanged", file=stderr)
+		return fallback
+	_tidy(answer)
+	if answer['kind'] == 'technical' and not (answer['prompt'] and answer['requirements']):
+		print("Prompt planning sorted it as technical but wrote too little; asking for the prompt and requirements", file=stderr)
+		try:
+			more = _tool_call(FACTS_INSTRUCTIONS, prompt, FACTS_TOOL)
+			if isinstance(more, dict):
+				_tidy(more)
+				answer.update({name: more[name] for name in ('prompt', 'aspect_ratio', 'requirements') if more.get(name)})
+		except Exception as e:
+			print("Asking again failed; drawing it as technical with what there is:", repr(e), file=stderr)
+	return answer
+
+def technical_prompt(prompt, planned):
+	"""The prompt the image model sees for a technical picture: the brief that puts accuracy first, the planned prompt
+	(or the user's own, if none was written), the requirements as must-haves, then the rules for its text."""
+	lines = [TECHNICAL_BRIEF, '', planned.get('prompt') or prompt, '']
+	requirements = planned.get('requirements') or []
+	if requirements:
+		lines.append("It must get these exactly right:")
+		lines += ['- ' + requirement for requirement in requirements]
+		lines.append('')
+	lines.append(TEXT_RULES)
+	return '\n'.join(lines)
+
 def _ask(system, user, max_tokens, temperature):
 	"""One call to the cheap text model. Returns its reply, or raises."""
 	body = {'model': config_openrouter_text_model, 'messages': [{'role': 'system', 'content': system}, {'role': 'user', 'content': user}],
@@ -258,10 +394,12 @@ def _ask(system, user, max_tokens, temperature):
 		e.close()
 		raise
 
-def _request(body, model=None):
-	body = dict(body, model=model or config_openrouter_image_model, aspect_ratio='1:1')
+def _request(body, model=None, aspect_ratio=None):
+	body = dict(body, model=model or config_openrouter_image_model, aspect_ratio=aspect_ratio if aspect_ratio in RATIOS else '1:1')
+	if config_image_quality:
+		body['quality'] = config_image_quality # ignored by models without a quality setting
 	if debug:
-		body['quality'] = 'low' # cheaper; ignored by models without a quality setting
+		body['quality'] = 'low' # cheaper
 	req = urllib.request.Request(URL, data=json.dumps(body).encode(), method='POST')
 	req.add_header('Content-Type', 'application/json')
 	req.add_header('Authorization', 'Bearer ' + (config_openrouter_api_key or ''))
