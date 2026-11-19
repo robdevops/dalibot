@@ -13,6 +13,8 @@ import lib.telegram as telegram
 import lib.openrouter as openrouter
 import lib.store as store
 import lib.palette as palette
+import lib.chart as chart
+import json
 from lib.multipart import image_type
 from lib.styles import STYLES, VIEWPOINTS, with_style
 
@@ -360,6 +362,8 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 						print("Remix: reusing the saved prompt, no text model call")
 				technical = False
 				aspect = None # a technical picture's planned shape; others are square
+				drawing = None # a to-scale chart's spec: the bot draws it instead of the image model
+				replan = False
 				if edit_message_id:
 					# a button on a technical picture: reuse the prompt and shape worked out for it, so every version agrees
 					saved = (store.get(chat_id, edit_message_id) or {}).get('images', {}).values()
@@ -367,16 +371,23 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 					if planned_image:
 						base, aspect, technical = planned_image['base'], planned_image.get('aspect'), True
 						print("Reusing the technical picture's planned prompt")
+					elif any((image.get('base') or '').startswith(chart.SAVED) for image in saved):
+						replan = True # drawn by the bot: the same data would draw the same picture, so ask the planner again
 				if not base:
 					if len(message.split()) < MIN_PROMPT_WORDS: # only reachable from a button press
 						# a button press on a very short prompt: have the text model flesh it out so it still works
 						message = openrouter.expand(message, MIN_PROMPT_WORDS)
 						print("Expanded short prompt:", message)
 					base = message
-					if not is_button: # a new prompt: a diagram or schematic must get its facts right before it is drawn
+					if not is_button or replan: # a new prompt: a diagram or schematic must get its facts right before it is drawn
 						planned = openrouter.plan(message)
 						print("Prompt kind:", (planned or {}).get('kind', 'unknown (used unchanged)'))
-						if planned and planned['kind'] == 'technical':
+						if planned and planned['kind'] == 'technical' and chart.check(planned.get('chart')):
+							drawing = chart.check(planned['chart'])
+							base = chart.SAVED + json.dumps(drawing)
+							technical = True
+							print("To scale: drawing it as a chart:", base)
+						elif planned and planned['kind'] == 'technical':
 							try:
 								base = openrouter.technical_prompt(message, planned)
 								aspect = planned.get('aspect_ratio')
@@ -388,7 +399,7 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 						# a cheap text model removes words that fight the style (a camera angle fights none)
 						base = openrouter.remix(message, STYLES[style_key][1]) or message
 				technical = technical or base.startswith(openrouter.TECHNICAL_HEADER) # e.g. a Remix that reused it
-				print("Sending prompt to OpenRouter:", model, style_key)
+				print("Drawing the to-scale chart" if drawing else f"Sending prompt to OpenRouter: {model} {style_key}")
 				styled = base
 				if style_key and technical: # its own line, after the rules, so it can't read as one of them
 					styled = base + '\nStyle: ' + STYLES[style_key][1] + '.'
@@ -396,7 +407,14 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 					styled = with_style(base, style_key, fix=openrouter.fix_style)
 				if style_key:
 					print("Styled prompt:", styled)
-				success, image_url = openrouter.generate(styled, model, aspect)
+				if drawing:
+					try:
+						success, image_url = True, chart.draw(drawing)
+					except Exception as e:
+						print("Drawing the chart failed:", repr(e), file=stderr)
+						success, image_url = False, "Sorry, I couldn't draw that diagram."
+				else:
+					success, image_url = openrouter.generate(styled, model, aspect)
 				if success:
 					print("Sending result to Telegram")
 					caption = styled # show the prompt that was actually used
@@ -410,14 +428,14 @@ def _process_request(typing, pending, service, chat_id, user, message, botName, 
 					if edit_message_id:
 						pending.wait() # the 'working' edit must land first, or it could overwrite the new image
 						print("Replacing message", edit_message_id, "in place;", len(image_url), "bytes" if isinstance(image_url, bytes) else "(url)")
-						sent = telegram.editPhoto(chat_id, edit_message_id, image_url, tag_caption(caption, command), keyboard)
+						sent = telegram.editPhoto(chat_id, edit_message_id, image_url, caption if drawing else tag_caption(caption, command), keyboard)
 						if sent:
 							sent['message_id'] = edit_message_id
 							pending.replaced = True
 						else:
 							print("In-place edit failed, posting a new image instead", file=stderr)
 					if not sent and telegram.upload_timeout() >= 5: # too close to the Lambda deadline: just say it failed
-						sent = telegram.sendPhoto(chat_id, image_url, tag_caption(caption, command), message_id, reply_markup=keyboard)
+						sent = telegram.sendPhoto(chat_id, image_url, caption if drawing else tag_caption(caption, command), message_id, reply_markup=keyboard)
 					if not sent:
 						error_to_telegram(chat_id, SEND_FAILED, message_id)
 					if sent and sent['message_id'] and sent['file_id']:

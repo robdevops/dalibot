@@ -271,14 +271,35 @@ PLAN_INSTRUCTIONS = (
 	"Describe every box, panel, label and arrow, with how they connect and the exact text and numbers of each, and put "
 	"every number shown among the requirements, so each one is checked. Keep each label short. Choose the "
 	"aspect_ratio that suits the layout: 1:1 unless it suits wide (16:9, 3:2, 4:3) or tall (9:16, 2:3, 3:4). "
+	"Image models can't draw to a measured scale. So when the picture's point is distances or sizes to scale, as orbits "
+	"around a centre or positions along a line from a starting point, also fill chart: the bot draws that exactly "
+	"itself, as an infographic with your title, subtitle, a table and a footnote, every value checked. Otherwise, the "
+	"image model draws it, so never ask it for a scale ruler, a numbered axis or a claim that something is to scale: "
+	"give the true numbers in labels and tables instead. "
 	"Call plan_picture once."
 )
+CHART_SCHEMA = {'type': 'object', 'description': 'Technical, to scale only: the picture as data, for the bot to draw exactly.',
+	'required': ['layout', 'title', 'unit', 'items'], 'properties': {
+		'layout': {'type': 'string', 'enum': ['orbits', 'line'], 'description': 'orbits: circles around a centre (e.g. planets around the Sun); line: positions along one axis from a starting point.'},
+		'title': {'type': 'string'}, 'subtitle': {'type': 'string', 'description': 'One line of key figures.'},
+		'unit': {'type': 'string', 'description': 'The unit of every value, e.g. AU or km.'},
+		'centre': {'type': 'string', 'description': 'What is at 0, e.g. Sun or Earth.'},
+		'items': {'type': 'array', 'maxItems': 24, 'items': {'type': 'object', 'required': ['name', 'value'], 'properties': {
+			'name': {'type': 'string'}, 'value': {'type': 'number', 'description': 'Its distance from the centre, in unit.'},
+			'group': {'type': 'string', 'description': 'For colour and the legend, e.g. Rocky planets.'},
+			'label': {'type': 'string', 'description': 'Optional: its label, if not its name and value.'},
+			'dashed': {'type': 'boolean', 'description': 'Optional: draw its orbit dashed (e.g. a spacecraft).'}}}},
+		'table': {'type': 'object', 'properties': {'columns': {'type': 'array', 'items': {'type': 'string'}},
+			'rows': {'type': 'array', 'items': {'type': 'array', 'items': {'type': 'string'}}},
+			'highlight': {'type': 'array', 'items': {'type': 'integer'}, 'description': 'Row numbers to highlight, from 0.'}}},
+		'footnote': {'type': 'string', 'description': 'What is and is not to scale.'}}}
 PLAN_TOOL = {'type': 'function', 'function': {'name': 'plan_picture', 'description': 'Say what kind of picture this is and, for a technical one, write its prompt and what it must get right.',
 	'parameters': {'type': 'object', 'required': ['kind'], 'properties': {
 		'kind': {'type': 'string', 'enum': ['technical', 'artistic'], 'description': 'technical for a diagram, cutaway, infographic or other picture that explains; artistic for anything else.'},
 		'prompt': {'type': 'string', 'description': 'Technical only: the full description of the picture for the image model.'},
 		'aspect_ratio': {'type': 'string', 'enum': RATIOS, 'description': "Technical only: the picture's shape."},
 		'requirements': {'type': 'array', 'maxItems': MAX_REQUIREMENTS, 'items': {'type': 'string'}, 'description': 'Technical only: each fact the picture must get exactly right, one per item.'},
+		'chart': CHART_SCHEMA,
 	}}}}
 # The second, narrower request when the first sorted a prompt as technical but wrote nothing for it.
 FACTS_INSTRUCTIONS = PLAN_INSTRUCTIONS.replace("Set kind to technical for", "The user wants a technical picture:").replace("Call plan_picture once.", "Call write_picture once.")
@@ -291,6 +312,7 @@ FACTS_TOOL = {'type': 'function', 'function': {'name': 'write_picture', 'descrip
 # image models favour looks over accuracy unless told otherwise (signalbot's brief and rules, with an infographic, not a
 # bare layout, as the default style)
 TECHNICAL_BRIEF = ("A picture that teaches, so it must be accurate: draw exactly what is described, and nothing that contradicts it. "
+	"Never draw a scale ruler, a numbered axis or a claim that something is to scale: give the true numbers only in labels and tables. "
 	"Keep any style the description asks for, but never at the cost of accuracy; if it names none, make it a polished, "
 	"information-rich infographic: a clear visual hierarchy, colour-coded elements, room around each part, consistent line weights and high contrast. "
 	"Draw each thing once; things too close to tell apart at the picture's scale share one mark and one label, with an inset if they must be shown apart.")
@@ -333,6 +355,7 @@ def _tidy(answer):
 		answer['aspect_ratio'] = None
 	requirements = answer.get('requirements') if isinstance(answer.get('requirements'), list) else []
 	answer['requirements'] = [str(r).strip()[:MAX_REQUIREMENT] for r in requirements if str(r or '').strip()][:MAX_REQUIREMENTS]
+	answer['chart'] = answer.get('chart') if isinstance(answer.get('chart'), dict) else None
 	return answer
 
 # Words that make a picture technical whatever the planning model says, or when it can't be asked (signalbot's list).
@@ -364,7 +387,7 @@ def plan(prompt):
 			"- drawing it as technical with the prompt as it was" if fallback else "- using the prompt unchanged", file=stderr)
 		return fallback
 	_tidy(answer)
-	if answer['kind'] == 'technical' and not (answer['prompt'] and answer['requirements']):
+	if answer['kind'] == 'technical' and not (answer['prompt'] and answer['requirements']) and not answer['chart']:
 		print("Prompt planning sorted it as technical but wrote too little; asking for the prompt and requirements", file=stderr)
 		try:
 			more = _tool_call(FACTS_INSTRUCTIONS, prompt, FACTS_TOOL)
