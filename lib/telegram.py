@@ -390,23 +390,25 @@ def albumInfo(response):
 	return photos
 
 def getFileURL(file_id):
+	"""The download URL of a file the user sent, or False. Tries once more after any failure (a network error, a
+	timeout, an error from Telegram or an odd answer), if the Lambda deadline leaves time for it."""
 	url = webhooks['telegram'] + "getFile"
-	data = {'file_id': file_id}
-	data = json.dumps(data).encode('utf-8')
+	data = json.dumps({'file_id': file_id}).encode('utf-8')
 	headers = {'Content-type': 'application/json'}
-	req = urllib.request.Request(url, data, headers, method='POST')
-	try:
-		r = urllib.request.urlopen(req, timeout=config_http_timeout)
-	except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
-		print("Failure executing request:", redact(url), redact(data), str(e))
-		return False
-	if r.code != 200:
-		print(r.code, "error Telegram getFileURL")
-		return False
-	data = json.load(r)
-	file_path = data['result']['file_path']
-	file_url = 'https://api.telegram.org/file/bot' + config_telegramBotToken + '/' + file_path
-	return(file_url)
+	for attempt in (1, 2):
+		req = urllib.request.Request(url, data, headers, method='POST')
+		try:
+			with urllib.request.urlopen(req, timeout=deadline.limit(config_http_timeout)) as r:
+				file_path = json.load(r)['result']['file_path']
+			return 'https://api.telegram.org/file/bot' + config_telegramBotToken + '/' + file_path
+		except Exception as e:
+			if isinstance(e, urllib.error.HTTPError):
+				e.close()
+			print("Failure executing request:", redact(url), redact(data), redact(str(e)), file=stderr)
+			if attempt == 2 or deadline.limit(config_http_timeout) < 5:
+				return False
+			print("Telegram getFile failed, trying once more", file=stderr)
+			time.sleep(1)
 
 def sendMessage(chat_id, message, message_id=None):
 	url = webhooks['telegram'] + "sendMessage?chat_id=" + str(chat_id)
